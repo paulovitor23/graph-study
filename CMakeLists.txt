@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_library(graph_study graph.cpp)
+add_library(graph_study graph.cpp algorithms.cpp)
 target_include_directories(graph_study PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_options(graph_study PRIVATE -Wall -Wextra -Wpedantic)
 
