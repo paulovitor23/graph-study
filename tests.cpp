@@ -93,6 +93,39 @@ void verify_empty_graph_statistics(GraphRepresentation representation) {
     assert(statistics.median_degree == 0.0);
 }
 
+void verify_breadth_first_search(GraphRepresentation representation) {
+    auto graph = make_graph(6, representation);
+    graph->add_edge(0, 1);
+    graph->add_edge(0, 2);
+    graph->add_edge(1, 3);
+    graph->add_edge(2, 4);
+
+    const auto search = breadth_first_search(*graph, 0);
+
+    assert(search.source == 0);
+    assert(search.parent[0] == 0);
+    assert(search.parent[1] == 0);
+    assert(search.parent[2] == 0);
+    assert(search.parent[3] == 1);
+    assert(search.parent[4] == 2);
+    assert(search.parent[5] == BreadthFirstSearchResult::not_visited);
+
+    assert(search.level[0] == 0);
+    assert(search.level[1] == 1);
+    assert(search.level[2] == 1);
+    assert(search.level[3] == 2);
+    assert(search.level[4] == 2);
+    assert(search.level[5] == BreadthFirstSearchResult::not_visited);
+
+    assert(search.was_visited(4));
+    assert(!search.was_visited(5));
+    assert((search.visit_order == std::vector<std::size_t>{0, 1, 2, 3, 4}));
+
+    assert(distance(*graph, 0, 4) == std::optional<std::size_t>{2});
+    assert(distance(*graph, 3, 4) == std::optional<std::size_t>{4});
+    assert(distance(*graph, 0, 5) == std::nullopt);
+}
+
 } // namespace
 
 int main() {
@@ -106,6 +139,8 @@ int main() {
     verify_even_degree_median(GraphRepresentation::AdjacencyMatrix);
     verify_empty_graph_statistics(GraphRepresentation::AdjacencyList);
     verify_empty_graph_statistics(GraphRepresentation::AdjacencyMatrix);
+    verify_breadth_first_search(GraphRepresentation::AdjacencyList);
+    verify_breadth_first_search(GraphRepresentation::AdjacencyMatrix);
 
     std::cout << "Todos os testes passaram.\n";
     return 0;

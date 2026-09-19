@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <numeric>
+#include <queue>
+#include <stdexcept>
 
 std::size_t degree(const Graph& graph, std::size_t vertex) {
     return graph.neighbors(vertex).size();
@@ -55,4 +57,71 @@ GraphStatistics calculate_statistics(const Graph& graph) {
     }
 
     return statistics;
+}
+
+bool BreadthFirstSearchResult::was_visited(std::size_t vertex) const {
+    if (vertex >= level.size()) {
+        throw std::out_of_range("vertice fora do resultado da busca");
+    }
+    return level[vertex] != not_visited;
+}
+
+BreadthFirstSearchResult breadth_first_search(
+    const Graph& graph,
+    std::size_t source
+) {
+    if (source >= graph.vertex_count()) {
+        throw std::out_of_range("vertice inicial fora do intervalo do grafo");
+    }
+
+    BreadthFirstSearchResult result;
+    result.source = source;
+    result.parent.assign(
+        graph.vertex_count(),
+        BreadthFirstSearchResult::not_visited
+    );
+    result.level.assign(
+        graph.vertex_count(),
+        BreadthFirstSearchResult::not_visited
+    );
+    result.visit_order.reserve(graph.vertex_count());
+
+    std::queue<std::size_t> pending;
+    result.parent[source] = source;
+    result.level[source] = 0;
+    pending.push(source);
+
+    while (!pending.empty()) {
+        const std::size_t current = pending.front();
+        pending.pop();
+        result.visit_order.push_back(current);
+
+        for (const std::size_t adjacent : graph.neighbors(current)) {
+            if (result.level[adjacent] != BreadthFirstSearchResult::not_visited) {
+                continue;
+            }
+
+            result.parent[adjacent] = current;
+            result.level[adjacent] = result.level[current] + 1;
+            pending.push(adjacent);
+        }
+    }
+
+    return result;
+}
+
+std::optional<std::size_t> distance(
+    const Graph& graph,
+    std::size_t source,
+    std::size_t destination
+) {
+    if (destination >= graph.vertex_count()) {
+        throw std::out_of_range("vertice de destino fora do intervalo do grafo");
+    }
+
+    const auto search = breadth_first_search(graph, source);
+    if (!search.was_visited(destination)) {
+        return std::nullopt;
+    }
+    return search.level[destination];
 }

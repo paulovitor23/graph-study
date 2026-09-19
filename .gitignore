@@ -1,0 +1,5 @@
+# Arquivos de dados grandes mantidos apenas localmente.
+data/*.txt
+
+# Arquivos gerados pela compilação com CMake.
+build/
