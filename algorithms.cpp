@@ -4,6 +4,7 @@
 #include <numeric>
 #include <queue>
 #include <stdexcept>
+#include <utility>
 
 std::size_t degree(const Graph& graph, std::size_t vertex) {
     return graph.neighbors(vertex).size();
@@ -188,4 +189,59 @@ DepthFirstSearchResult depth_first_search(
     }
 
     return result;
+}
+
+std::size_t ConnectedComponent::size() const noexcept {
+    return vertices.size();
+}
+
+std::vector<ConnectedComponent> connected_components(const Graph& graph) {
+    std::vector<ConnectedComponent> components;
+    std::vector<unsigned char> visited(
+        graph.vertex_count(),
+        static_cast<unsigned char>(0)
+    );
+    std::vector<std::size_t> pending;
+
+    for (std::size_t start = 0; start < graph.vertex_count(); ++start) {
+        if (visited[start] != 0) {
+            continue;
+        }
+
+        ConnectedComponent component;
+        pending.clear();
+        pending.push_back(start);
+        visited[start] = 1;
+
+        while (!pending.empty()) {
+            const std::size_t current = pending.back();
+            pending.pop_back();
+            component.vertices.push_back(current);
+
+            for (const std::size_t adjacent : graph.neighbors(current)) {
+                if (visited[adjacent] != 0) {
+                    continue;
+                }
+                visited[adjacent] = 1;
+                pending.push_back(adjacent);
+            }
+        }
+
+        // Facilita a exibicao e torna o resultado independente da representacao.
+        std::sort(component.vertices.begin(), component.vertices.end());
+        components.push_back(std::move(component));
+    }
+
+    std::sort(
+        components.begin(),
+        components.end(),
+        [](const ConnectedComponent& left, const ConnectedComponent& right) {
+            if (left.size() != right.size()) {
+                return left.size() > right.size();
+            }
+            return left.vertices < right.vertices;
+        }
+    );
+
+    return components;
 }

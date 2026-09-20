@@ -61,4 +61,12 @@ DepthFirstSearchResult depth_first_search(
     std::size_t source
 );
 
+struct ConnectedComponent {
+    std::vector<std::size_t> vertices;
+
+    std::size_t size() const noexcept;
+};
+
+std::vector<ConnectedComponent> connected_components(const Graph& graph);
+
 #endif

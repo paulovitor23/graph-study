@@ -155,6 +155,34 @@ void verify_depth_first_search(GraphRepresentation representation) {
     assert((search.visit_order == std::vector<std::size_t>{0, 1, 3, 2, 4}));
 }
 
+void verify_connected_components(GraphRepresentation representation) {
+    auto graph = make_graph(8, representation);
+
+    // Componente {0, 1, 2, 3}.
+    graph->add_edge(0, 1);
+    graph->add_edge(1, 2);
+    graph->add_edge(2, 3);
+    graph->add_edge(3, 0);
+
+    // Componente {4, 5}; 6 e 7 sao vertices isolados.
+    graph->add_edge(4, 5);
+
+    const auto components = connected_components(*graph);
+
+    assert(components.size() == 4);
+    assert(components[0].size() == 4);
+    assert((components[0].vertices == std::vector<std::size_t>{0, 1, 2, 3}));
+    assert(components[1].size() == 2);
+    assert((components[1].vertices == std::vector<std::size_t>{4, 5}));
+    assert((components[2].vertices == std::vector<std::size_t>{6}));
+    assert((components[3].vertices == std::vector<std::size_t>{7}));
+}
+
+void verify_empty_graph_components(GraphRepresentation representation) {
+    auto graph = make_graph(0, representation);
+    assert(connected_components(*graph).empty());
+}
+
 } // namespace
 
 int main() {
@@ -172,6 +200,10 @@ int main() {
     verify_breadth_first_search(GraphRepresentation::AdjacencyMatrix);
     verify_depth_first_search(GraphRepresentation::AdjacencyList);
     verify_depth_first_search(GraphRepresentation::AdjacencyMatrix);
+    verify_connected_components(GraphRepresentation::AdjacencyList);
+    verify_connected_components(GraphRepresentation::AdjacencyMatrix);
+    verify_empty_graph_components(GraphRepresentation::AdjacencyList);
+    verify_empty_graph_components(GraphRepresentation::AdjacencyMatrix);
 
     std::cout << "Todos os testes passaram.\n";
     return 0;

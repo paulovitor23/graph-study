@@ -13,11 +13,11 @@ para o trabalho de Teoria dos Grafos.
 - grau mínimo, máximo, médio e mediana dos graus.
 - busca em largura (BFS), com pai, nível e ordem de visita;
 - busca em profundidade (DFS), com pai, nível e ordem de visita;
+- componentes conexas, ordenadas por tamanho decrescente;
 - distância entre dois vértices usando BFS.
 
 ## Próximas etapas
 
-- componentes conexas;
 - distâncias e diâmetro;
 - arquivos de saída e medições dos estudos de caso.
 
