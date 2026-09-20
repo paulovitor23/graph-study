@@ -3,3 +3,6 @@ data/*.txt
 
 # Arquivos gerados pela compilação com CMake.
 build/
+
+# Arquivos de resultados gerados pelos experimentos.
+resultados/**/*.txt
