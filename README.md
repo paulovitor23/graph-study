@@ -12,11 +12,11 @@ para o trabalho de Teoria dos Grafos.
 - grau de cada vértice;
 - grau mínimo, máximo, médio e mediana dos graus.
 - busca em largura (BFS), com pai, nível e ordem de visita;
+- busca em profundidade (DFS), com pai, nível e ordem de visita;
 - distância entre dois vértices usando BFS.
 
 ## Próximas etapas
 
-- busca em profundidade (DFS), incluindo pai e nível dos vértices;
 - componentes conexas;
 - distâncias e diâmetro;
 - arquivos de saída e medições dos estudos de caso.

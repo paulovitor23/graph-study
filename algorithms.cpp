@@ -125,3 +125,67 @@ std::optional<std::size_t> distance(
     }
     return search.level[destination];
 }
+
+bool DepthFirstSearchResult::was_visited(std::size_t vertex) const {
+    if (vertex >= level.size()) {
+        throw std::out_of_range("vertice fora do resultado da busca");
+    }
+    return level[vertex] != not_visited;
+}
+
+DepthFirstSearchResult depth_first_search(
+    const Graph& graph,
+    std::size_t source
+) {
+    if (source >= graph.vertex_count()) {
+        throw std::out_of_range("vertice inicial fora do intervalo do grafo");
+    }
+
+    DepthFirstSearchResult result;
+    result.source = source;
+    result.parent.assign(
+        graph.vertex_count(),
+        DepthFirstSearchResult::not_visited
+    );
+    result.level.assign(
+        graph.vertex_count(),
+        DepthFirstSearchResult::not_visited
+    );
+    result.visit_order.reserve(graph.vertex_count());
+
+    struct StackFrame {
+        std::size_t vertex;
+        std::vector<std::size_t> adjacent_vertices;
+        std::size_t next_neighbor = 0;
+    };
+
+    std::vector<StackFrame> stack;
+    stack.reserve(graph.vertex_count());
+
+    result.parent[source] = source;
+    result.level[source] = 0;
+    result.visit_order.push_back(source);
+    stack.push_back({source, graph.neighbors(source), 0});
+
+    while (!stack.empty()) {
+        StackFrame& frame = stack.back();
+
+        if (frame.next_neighbor >= frame.adjacent_vertices.size()) {
+            stack.pop_back();
+            continue;
+        }
+
+        const std::size_t adjacent =
+            frame.adjacent_vertices[frame.next_neighbor++];
+        if (result.level[adjacent] != DepthFirstSearchResult::not_visited) {
+            continue;
+        }
+
+        result.parent[adjacent] = frame.vertex;
+        result.level[adjacent] = result.level[frame.vertex] + 1;
+        result.visit_order.push_back(adjacent);
+        stack.push_back({adjacent, graph.neighbors(adjacent), 0});
+    }
+
+    return result;
+}
