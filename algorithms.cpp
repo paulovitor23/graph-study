@@ -6,6 +6,64 @@
 #include <stdexcept>
 #include <utility>
 
+namespace {
+
+struct DistanceSearchResult {
+    std::vector<std::size_t> distances;
+    std::size_t farthest_vertex;
+};
+
+DistanceSearchResult breadth_first_distances(
+    const Graph& graph,
+    std::size_t source
+) {
+    if (source >= graph.vertex_count()) {
+        throw std::out_of_range("vertice inicial fora do intervalo do grafo");
+    }
+
+    DistanceSearchResult result;
+    result.distances.assign(
+        graph.vertex_count(),
+        BreadthFirstSearchResult::not_visited
+    );
+    result.farthest_vertex = source;
+
+    std::queue<std::size_t> pending;
+    result.distances[source] = 0;
+    pending.push(source);
+
+    while (!pending.empty()) {
+        const std::size_t current = pending.front();
+        pending.pop();
+
+        for (const std::size_t adjacent : graph.neighbors(current)) {
+            if (result.distances[adjacent] !=
+                BreadthFirstSearchResult::not_visited) {
+                continue;
+            }
+
+            result.distances[adjacent] = result.distances[current] + 1;
+            pending.push(adjacent);
+        }
+    }
+
+    for (std::size_t vertex = 0; vertex < graph.vertex_count(); ++vertex) {
+        if (result.distances[vertex] ==
+            BreadthFirstSearchResult::not_visited) {
+            continue;
+        }
+
+        if (result.distances[vertex] >
+            result.distances[result.farthest_vertex]) {
+            result.farthest_vertex = vertex;
+        }
+    }
+
+    return result;
+}
+
+} // namespace
+
 std::size_t degree(const Graph& graph, std::size_t vertex) {
     return graph.neighbors(vertex).size();
 }
@@ -244,4 +302,70 @@ std::vector<ConnectedComponent> connected_components(const Graph& graph) {
     );
 
     return components;
+}
+
+DiameterResult exact_diameter(const Graph& graph) {
+    DiameterResult result;
+    result.is_exact = true;
+
+    if (graph.vertex_count() == 0) {
+        return result;
+    }
+
+    result.first_vertex = 0;
+    result.second_vertex = 0;
+
+    for (std::size_t source = 0; source < graph.vertex_count(); ++source) {
+        const auto search = breadth_first_distances(graph, source);
+
+        for (std::size_t destination = source + 1;
+             destination < graph.vertex_count();
+             ++destination) {
+            const std::size_t current_distance = search.distances[destination];
+            if (current_distance == BreadthFirstSearchResult::not_visited ||
+                current_distance <= result.value) {
+                continue;
+            }
+
+            result.value = current_distance;
+            result.first_vertex = source;
+            result.second_vertex = destination;
+        }
+    }
+
+    return result;
+}
+
+DiameterResult approximate_diameter(const Graph& graph) {
+    DiameterResult result;
+    result.is_exact = false;
+
+    const auto components = connected_components(graph);
+    if (components.empty()) {
+        return result;
+    }
+
+    result.first_vertex = components.front().vertices.front();
+    result.second_vertex = result.first_vertex;
+
+    for (const auto& component : components) {
+        const std::size_t start = component.vertices.front();
+        const auto first_search = breadth_first_distances(graph, start);
+        const std::size_t first_endpoint = first_search.farthest_vertex;
+
+        const auto second_search = breadth_first_distances(
+            graph,
+            first_endpoint
+        );
+        const std::size_t second_endpoint = second_search.farthest_vertex;
+        const std::size_t candidate = second_search.distances[second_endpoint];
+
+        if (candidate > result.value) {
+            result.value = candidate;
+            result.first_vertex = first_endpoint;
+            result.second_vertex = second_endpoint;
+        }
+    }
+
+    return result;
 }

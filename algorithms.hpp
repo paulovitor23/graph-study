@@ -69,4 +69,19 @@ struct ConnectedComponent {
 
 std::vector<ConnectedComponent> connected_components(const Graph& graph);
 
+struct DiameterResult {
+    static constexpr std::size_t no_vertex =
+        std::numeric_limits<std::size_t>::max();
+
+    std::size_t value = 0;
+    std::size_t first_vertex = no_vertex;
+    std::size_t second_vertex = no_vertex;
+    bool is_exact = false;
+};
+
+// Em grafos desconectados, considera a maior distancia finita encontrada
+// dentro de qualquer componente conexa.
+DiameterResult exact_diameter(const Graph& graph);
+DiameterResult approximate_diameter(const Graph& graph);
+
 #endif

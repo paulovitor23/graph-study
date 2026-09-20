@@ -183,6 +183,59 @@ void verify_empty_graph_components(GraphRepresentation representation) {
     assert(connected_components(*graph).empty());
 }
 
+void verify_diameter(GraphRepresentation representation) {
+    auto path = make_graph(5, representation);
+    path->add_edge(0, 1);
+    path->add_edge(1, 2);
+    path->add_edge(2, 3);
+    path->add_edge(3, 4);
+
+    const auto exact_path = exact_diameter(*path);
+    assert(exact_path.is_exact);
+    assert(exact_path.value == 4);
+    assert(exact_path.first_vertex == 0);
+    assert(exact_path.second_vertex == 4);
+
+    const auto approximate_path = approximate_diameter(*path);
+    assert(!approximate_path.is_exact);
+    assert(approximate_path.value == 4);
+    assert(approximate_path.first_vertex == 4);
+    assert(approximate_path.second_vertex == 0);
+
+    auto disconnected = make_graph(7, representation);
+    // Componente triangular com diametro 1.
+    disconnected->add_edge(0, 1);
+    disconnected->add_edge(1, 2);
+    disconnected->add_edge(2, 0);
+    // Componente em caminho com diametro 2; vertice 6 e isolado.
+    disconnected->add_edge(3, 4);
+    disconnected->add_edge(4, 5);
+
+    const auto exact_disconnected = exact_diameter(*disconnected);
+    assert(exact_disconnected.value == 2);
+    assert(exact_disconnected.first_vertex == 3);
+    assert(exact_disconnected.second_vertex == 5);
+
+    const auto approximate_disconnected = approximate_diameter(*disconnected);
+    assert(approximate_disconnected.value == 2);
+}
+
+void verify_empty_graph_diameter(GraphRepresentation representation) {
+    auto graph = make_graph(0, representation);
+
+    const auto exact = exact_diameter(*graph);
+    assert(exact.is_exact);
+    assert(exact.value == 0);
+    assert(exact.first_vertex == DiameterResult::no_vertex);
+    assert(exact.second_vertex == DiameterResult::no_vertex);
+
+    const auto approximate = approximate_diameter(*graph);
+    assert(!approximate.is_exact);
+    assert(approximate.value == 0);
+    assert(approximate.first_vertex == DiameterResult::no_vertex);
+    assert(approximate.second_vertex == DiameterResult::no_vertex);
+}
+
 } // namespace
 
 int main() {
@@ -204,6 +257,10 @@ int main() {
     verify_connected_components(GraphRepresentation::AdjacencyMatrix);
     verify_empty_graph_components(GraphRepresentation::AdjacencyList);
     verify_empty_graph_components(GraphRepresentation::AdjacencyMatrix);
+    verify_diameter(GraphRepresentation::AdjacencyList);
+    verify_diameter(GraphRepresentation::AdjacencyMatrix);
+    verify_empty_graph_diameter(GraphRepresentation::AdjacencyList);
+    verify_empty_graph_diameter(GraphRepresentation::AdjacencyMatrix);
 
     std::cout << "Todos os testes passaram.\n";
     return 0;

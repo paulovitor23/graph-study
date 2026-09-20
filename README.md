@@ -14,11 +14,12 @@ para o trabalho de Teoria dos Grafos.
 - busca em largura (BFS), com pai, nível e ordem de visita;
 - busca em profundidade (DFS), com pai, nível e ordem de visita;
 - componentes conexas, ordenadas por tamanho decrescente;
-- distância entre dois vértices usando BFS.
+- distância entre dois vértices usando BFS;
+- diâmetro exato;
+- aproximação do diâmetro para grafos grandes.
 
 ## Próximas etapas
 
-- distâncias e diâmetro;
 - arquivos de saída e medições dos estudos de caso.
 
 ## Compilação e testes
