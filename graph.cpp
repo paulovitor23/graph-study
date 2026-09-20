@@ -139,17 +139,23 @@ std::unique_ptr<Graph> read_graph_from_file(
     std::size_t file_u = 0;
     std::size_t file_v = 0;
 
-    while (input >> file_u >> file_v) {
+    while (true) {
+        if (!(input >> file_u)) {
+            if (input.eof()) {
+                break;
+            }
+            throw std::runtime_error("linha de aresta invalida no arquivo");
+        }
+        if (!(input >> file_v)) {
+            throw std::runtime_error("aresta incompleta ou invalida no arquivo");
+        }
+
         // O enunciado numera os vertices a partir de 1; internamente usamos 0.
         if (file_u == 0 || file_v == 0 ||
             file_u > vertex_count || file_v > vertex_count) {
             throw std::runtime_error("aresta contem vertice fora do intervalo");
         }
         graph->add_edge(file_u - 1, file_v - 1);
-    }
-
-    if (!input.eof()) {
-        throw std::runtime_error("linha de aresta invalida no arquivo");
     }
 
     return graph;

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -16,7 +17,12 @@
 #include <utility>
 #include <vector>
 
-#ifdef __APPLE__
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <psapi.h>
+#elif defined(__APPLE__)
 #include <mach/mach.h>
 #include <sys/sysctl.h>
 #elif defined(__linux__)
@@ -33,6 +39,7 @@ struct Configuration {
     std::string output_prefix;
     std::size_t search_count = 100;
     std::string diameter_mode = "approx";
+    std::size_t tree_source = 1;
 };
 
 GraphRepresentation parse_representation(const std::string& value) {
@@ -46,10 +53,10 @@ GraphRepresentation parse_representation(const std::string& value) {
 }
 
 Configuration parse_arguments(int argc, char* argv[]) {
-    if (argc < 4 || argc > 6) {
+    if (argc < 4 || argc > 7) {
         throw std::invalid_argument(
             "uso: graph_experiments <grafo.txt> <list|matrix> "
-            "<prefixo_saida> [numero_buscas] [exact|approx|skip]"
+            "<prefixo_saida> [numero_buscas] [exact|approx|skip] [raiz_arvores]"
         );
     }
 
@@ -61,13 +68,20 @@ Configuration parse_arguments(int argc, char* argv[]) {
             throw std::invalid_argument("quantidade de buscas invalida");
         }
     }
-    if (argc == 6) {
+    if (argc >= 6) {
         result.diameter_mode = argv[5];
     }
     if (result.diameter_mode != "exact" &&
         result.diameter_mode != "approx" &&
         result.diameter_mode != "skip") {
         throw std::invalid_argument("diametro deve ser exact, approx ou skip");
+    }
+    if (argc == 7) {
+        std::size_t consumed = 0;
+        result.tree_source = std::stoull(argv[6], &consumed);
+        if (consumed != std::string(argv[6]).size() || result.tree_source == 0) {
+            throw std::invalid_argument("raiz das arvores invalida");
+        }
     }
     return result;
 }
@@ -82,7 +96,14 @@ std::size_t declared_vertex_count(const std::string& path) {
 }
 
 std::size_t physical_memory_bytes() {
-#ifdef __APPLE__
+#ifdef _WIN32
+    MEMORYSTATUSEX info{};
+    info.dwLength = sizeof(info);
+    if (GlobalMemoryStatusEx(&info) != 0) {
+        return static_cast<std::size_t>(info.ullTotalPhys);
+    }
+    throw std::runtime_error("nao foi possivel consultar a memoria fisica");
+#elif defined(__APPLE__)
     std::uint64_t value = 0;
     std::size_t size = sizeof(value);
     if (sysctlbyname("hw.memsize", &value, &size, nullptr, 0) == 0) {
@@ -125,7 +146,12 @@ void verify_matrix_viability(
 }
 
 std::size_t resident_memory_bytes() {
-#ifdef __APPLE__
+#ifdef _WIN32
+    PROCESS_MEMORY_COUNTERS info{};
+    if (GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info)) != 0) {
+        return static_cast<std::size_t>(info.WorkingSetSize);
+    }
+#elif defined(__APPLE__)
     mach_task_basic_info_data_t info{};
     mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
     if (task_info(
@@ -142,7 +168,7 @@ std::size_t resident_memory_bytes() {
         return resident * static_cast<std::size_t>(sysconf(_SC_PAGESIZE));
     }
 #endif
-    return 0;
+    throw std::runtime_error("nao foi possivel medir a memoria residente");
 }
 
 std::vector<std::size_t> select_starts(
@@ -215,7 +241,7 @@ void write_queries(std::ostream& output, const Graph& graph) {
     }
 
     output << "\nDISTANCIAS SOLICITADAS\n";
-    for (const auto [source, target] :
+    for (const auto& [source, target] :
          {std::pair{10U, 20U}, std::pair{10U, 30U}, std::pair{20U, 30U}}) {
         output << '(' << source << ',' << target << "): ";
         if (target > graph.vertex_count()) {
@@ -247,6 +273,66 @@ void write_components(
     }
 }
 
+void write_tree_value(
+    std::ostream& output,
+    std::size_t value,
+    std::size_t sentinel,
+    std::size_t offset
+) {
+    if (value == sentinel) {
+        output << '-';
+    } else {
+        output << value + offset;
+    }
+}
+
+void write_search_trees(
+    const std::string& path,
+    const Graph& graph,
+    std::size_t source
+) {
+    if (graph.vertex_count() != 0 && source > graph.vertex_count()) {
+        throw std::out_of_range("raiz das arvores fora do intervalo do grafo");
+    }
+
+    std::ofstream output(path);
+    if (!output) {
+        throw std::runtime_error("nao foi possivel criar " + path);
+    }
+    if (graph.vertex_count() == 0) {
+        output << "grafo vazio: nenhuma arvore de busca\n";
+        return;
+    }
+
+    const auto bfs = breadth_first_search(graph, source - 1);
+    const auto dfs = depth_first_search(graph, source - 1);
+    output << "raiz=" << source << '\n'
+           << "vertice pai_bfs nivel_bfs pai_dfs nivel_dfs\n";
+
+    for (std::size_t vertex = 0; vertex < graph.vertex_count(); ++vertex) {
+        output << vertex + 1 << ' ';
+        write_tree_value(
+            output, bfs.parent[vertex], BreadthFirstSearchResult::not_visited, 1
+        );
+        output << ' ';
+        write_tree_value(
+            output, bfs.level[vertex], BreadthFirstSearchResult::not_visited, 0
+        );
+        output << ' ';
+        write_tree_value(
+            output, dfs.parent[vertex], DepthFirstSearchResult::not_visited, 1
+        );
+        output << ' ';
+        write_tree_value(
+            output, dfs.level[vertex], DepthFirstSearchResult::not_visited, 0
+        );
+        output << '\n';
+    }
+    if (!output) {
+        throw std::runtime_error("falha ao escrever " + path);
+    }
+}
+
 void run(const Configuration& configuration) {
     const std::filesystem::path prefix(configuration.output_prefix);
     if (prefix.has_parent_path()) {
@@ -261,6 +347,10 @@ void run(const Configuration& configuration) {
         configuration.input_path,
         configuration.representation
     );
+    if (graph->vertex_count() != 0 &&
+        configuration.tree_source > graph->vertex_count()) {
+        throw std::out_of_range("raiz das arvores fora do intervalo do grafo");
+    }
     const std::size_t memory = resident_memory_bytes();
     const auto statistics = calculate_statistics(*graph);
 
@@ -314,7 +404,10 @@ void run(const Configuration& configuration) {
            << "tempo_componentes_ms=" << components_ms << '\n'
            << "buscas_cronometradas=" << starts.size() << '\n'
            << "tempo_medio_bfs_ms=" << bfs_ms << '\n'
-           << "tempo_medio_dfs_ms=" << dfs_ms << '\n';
+           << "tempo_medio_dfs_ms=" << dfs_ms << '\n'
+           << "raiz_arvores=" << configuration.tree_source << '\n'
+           << "arquivo_arvores=" << configuration.output_prefix
+           << "_search_trees.txt\n";
 
     write_queries(output, *graph);
     output << "\nDIAMETRO\n";
@@ -334,9 +427,15 @@ void run(const Configuration& configuration) {
     }
 
     write_components(configuration.output_prefix + "_components.txt", components);
+    write_search_trees(
+        configuration.output_prefix + "_search_trees.txt",
+        *graph,
+        configuration.tree_source
+    );
     std::cout << "Experimento concluido.\nResumo: " << summary_path
               << "\nComponentes: " << configuration.output_prefix
-              << "_components.txt\n";
+              << "_components.txt\nArvores: " << configuration.output_prefix
+              << "_search_trees.txt\n";
 }
 
 } // namespace

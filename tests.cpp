@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <stdexcept>
 #include <vector>
 
 namespace {
@@ -46,6 +47,25 @@ void verify_file_reader(GraphRepresentation representation) {
     assert(graph->has_edge(4, 3));
 
     std::remove(path);
+}
+
+void verify_incomplete_edge_is_rejected(GraphRepresentation representation) {
+    const char* path = "graph_test_incomplete_edge.txt";
+    {
+        std::ofstream output(path);
+        output << "3\n1 2\n2\n";
+    }
+
+    bool rejected = false;
+    try {
+        read_graph_from_file(path, representation);
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    std::remove(path);
+    if (!rejected) {
+        throw std::runtime_error("leitor aceitou uma aresta incompleta");
+    }
 }
 
 void verify_statistics(GraphRepresentation representation) {
@@ -243,6 +263,8 @@ int main() {
     verify_representation(GraphRepresentation::AdjacencyMatrix);
     verify_file_reader(GraphRepresentation::AdjacencyList);
     verify_file_reader(GraphRepresentation::AdjacencyMatrix);
+    verify_incomplete_edge_is_rejected(GraphRepresentation::AdjacencyList);
+    verify_incomplete_edge_is_rejected(GraphRepresentation::AdjacencyMatrix);
     verify_statistics(GraphRepresentation::AdjacencyList);
     verify_statistics(GraphRepresentation::AdjacencyMatrix);
     verify_even_degree_median(GraphRepresentation::AdjacencyList);
