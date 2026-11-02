@@ -23,6 +23,7 @@ public:
 
     std::size_t vertex_count() const noexcept;
     std::size_t edge_count() const noexcept;
+    bool has_negative_weight() const noexcept;
 
     virtual void add_edge(
         std::size_t u,
@@ -34,11 +35,12 @@ public:
 
 protected:
     void validate_vertex(std::size_t vertex) const;
-    void register_edge() noexcept;
+    void register_edge(double weight) noexcept;
 
 private:
     std::size_t vertex_count_;
     std::size_t edge_count_ = 0;
+    bool has_negative_weight_ = false;
 };
 
 class AdjacencyListGraph final : public Graph {

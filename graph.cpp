@@ -35,14 +35,19 @@ std::size_t Graph::edge_count() const noexcept {
     return edge_count_;
 }
 
+bool Graph::has_negative_weight() const noexcept {
+    return has_negative_weight_;
+}
+
 void Graph::validate_vertex(std::size_t vertex) const {
     if (vertex >= vertex_count_) {
         throw std::out_of_range("vertice fora do intervalo do grafo");
     }
 }
 
-void Graph::register_edge() noexcept {
+void Graph::register_edge(double weight) noexcept {
     ++edge_count_;
+    has_negative_weight_ = has_negative_weight_ || weight < 0.0;
 }
 
 AdjacencyListGraph::AdjacencyListGraph(std::size_t vertex_count)
@@ -73,7 +78,7 @@ void AdjacencyListGraph::add_edge(
     if (u != v) {
         adjacency_[v].push_back({u, weight});
     }
-    register_edge();
+    register_edge(weight);
 }
 
 bool AdjacencyListGraph::has_edge(std::size_t u, std::size_t v) const {
@@ -125,7 +130,7 @@ void AdjacencyMatrixGraph::add_edge(
 
     adjacency_[index(u, v)] = weight;
     adjacency_[index(v, u)] = weight;
-    register_edge();
+    register_edge(weight);
 }
 
 bool AdjacencyMatrixGraph::has_edge(std::size_t u, std::size_t v) const {

@@ -5,7 +5,7 @@ data/*.txt
 build/
 
 # Arquivos de resultados gerados pelos experimentos.
-resultados/**/*.txt
+resultados/
 
 PLANO_PARTE_2.md
 

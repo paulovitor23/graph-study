@@ -16,6 +16,12 @@ target_compile_options(graph_tests PRIVATE -Wall -Wextra -Wpedantic)
 add_executable(graph_experiments experiments.cpp)
 target_link_libraries(graph_experiments PRIVATE graph_study)
 target_compile_options(graph_experiments PRIVATE -Wall -Wextra -Wpedantic)
+
+add_executable(weighted_graph_experiments weighted_experiments.cpp)
+target_link_libraries(weighted_graph_experiments PRIVATE graph_study)
+target_compile_options(
+    weighted_graph_experiments PRIVATE -Wall -Wextra -Wpedantic
+)
 if(WIN32)
     target_link_libraries(graph_experiments PRIVATE psapi)
 endif()

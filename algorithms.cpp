@@ -64,14 +64,10 @@ DistanceSearchResult breadth_first_distances(
 }
 
 void reject_negative_weights(const Graph& graph) {
-    for (std::size_t vertex = 0; vertex < graph.vertex_count(); ++vertex) {
-        for (const Edge& edge : graph.neighbors(vertex)) {
-            if (edge.weight < 0.0) {
-                throw std::domain_error(
-                    "Dijkstra nao suporta arestas com peso negativo"
-                );
-            }
-        }
+    if (graph.has_negative_weight()) {
+        throw std::domain_error(
+            "Dijkstra nao suporta arestas com peso negativo"
+        );
     }
 }
 

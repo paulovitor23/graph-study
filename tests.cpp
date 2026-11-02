@@ -60,9 +60,12 @@ void verify_representation(GraphRepresentation representation) {
 
 void verify_weighted_edges(GraphRepresentation representation) {
     auto graph = make_graph(4, representation);
+    assert(!graph->has_negative_weight());
     graph->add_edge(0, 1, 2.5);
     graph->add_edge(1, 2, 0.0);
+    assert(!graph->has_negative_weight());
     graph->add_edge(2, 3, -4.25);
+    assert(graph->has_negative_weight());
     graph->add_edge(0, 1, 2.5);
 
     assert(graph->edge_count() == 3);
