@@ -44,6 +44,23 @@ std::optional<std::size_t> distance(
     std::size_t destination
 );
 
+struct ShortestPathResult {
+    static constexpr std::size_t no_parent =
+        std::numeric_limits<std::size_t>::max();
+
+    std::size_t source = no_parent;
+    std::vector<double> distance;
+    std::vector<std::size_t> parent;
+
+    bool was_reached(std::size_t vertex) const;
+    std::vector<std::size_t> path_to(std::size_t vertex) const;
+};
+
+ShortestPathResult dijkstra_vector(
+    const Graph& graph,
+    std::size_t source
+);
+
 struct DepthFirstSearchResult {
     static constexpr std::size_t not_visited =
         std::numeric_limits<std::size_t>::max();

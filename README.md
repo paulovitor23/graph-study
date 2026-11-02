@@ -16,6 +16,7 @@ para o trabalho de Teoria dos Grafos.
 - busca em profundidade (DFS), com pai, nível e ordem de visita;
 - componentes conexas, ordenadas por tamanho decrescente;
 - distância entre dois vértices usando BFS;
+- Dijkstra com seleção linear em vetor, distâncias e caminhos mínimos;
 - diâmetro exato;
 - aproximação do diâmetro para grafos grandes.
 
@@ -33,7 +34,7 @@ dois vértices e, opcionalmente, o peso da aresta:
 
 Quando o peso é omitido, a aresta recebe peso `1.0`, mantendo compatibilidade
 com os arquivos da primeira parte. Pesos negativos podem ser armazenados; a
-restrição deles será tratada pelos algoritmos que não os suportam.
+execução do Dijkstra os rejeita com uma mensagem clara.
 
 ## Próximas etapas
 

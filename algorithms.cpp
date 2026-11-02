@@ -63,6 +63,35 @@ DistanceSearchResult breadth_first_distances(
     return result;
 }
 
+void reject_negative_weights(const Graph& graph) {
+    for (std::size_t vertex = 0; vertex < graph.vertex_count(); ++vertex) {
+        for (const Edge& edge : graph.neighbors(vertex)) {
+            if (edge.weight < 0.0) {
+                throw std::domain_error(
+                    "Dijkstra nao suporta arestas com peso negativo"
+                );
+            }
+        }
+    }
+}
+
+std::size_t extract_minimum_vertex(
+    const std::vector<double>& distance,
+    const std::vector<unsigned char>& settled
+) {
+    std::size_t minimum = ShortestPathResult::no_parent;
+    for (std::size_t vertex = 0; vertex < distance.size(); ++vertex) {
+        if (settled[vertex] != 0) {
+            continue;
+        }
+        if (minimum == ShortestPathResult::no_parent ||
+            distance[vertex] < distance[minimum]) {
+            minimum = vertex;
+        }
+    }
+    return minimum;
+}
+
 } // namespace
 
 std::size_t degree(const Graph& graph, std::size_t vertex) {
@@ -185,6 +214,88 @@ std::optional<std::size_t> distance(
         return std::nullopt;
     }
     return search.level[destination];
+}
+
+bool ShortestPathResult::was_reached(std::size_t vertex) const {
+    if (vertex >= distance.size()) {
+        throw std::out_of_range("vertice fora do resultado de Dijkstra");
+    }
+    return distance[vertex] != std::numeric_limits<double>::infinity();
+}
+
+std::vector<std::size_t> ShortestPathResult::path_to(
+    std::size_t vertex
+) const {
+    if (!was_reached(vertex)) {
+        return {};
+    }
+
+    std::vector<std::size_t> path;
+    std::size_t current = vertex;
+    while (current != source) {
+        path.push_back(current);
+        if (current >= parent.size() || parent[current] == no_parent) {
+            throw std::logic_error("arvore de caminhos minimos inconsistente");
+        }
+        current = parent[current];
+        if (path.size() > parent.size()) {
+            throw std::logic_error("ciclo na arvore de caminhos minimos");
+        }
+    }
+    path.push_back(source);
+    std::reverse(path.begin(), path.end());
+    return path;
+}
+
+ShortestPathResult dijkstra_vector(
+    const Graph& graph,
+    std::size_t source
+) {
+    if (source >= graph.vertex_count()) {
+        throw std::out_of_range("vertice inicial fora do intervalo do grafo");
+    }
+    reject_negative_weights(graph);
+
+    ShortestPathResult result;
+    result.source = source;
+    result.distance.assign(
+        graph.vertex_count(),
+        std::numeric_limits<double>::infinity()
+    );
+    result.parent.assign(graph.vertex_count(), ShortestPathResult::no_parent);
+
+    std::vector<unsigned char> settled(
+        graph.vertex_count(),
+        static_cast<unsigned char>(0)
+    );
+    result.distance[source] = 0.0;
+    result.parent[source] = source;
+
+    for (std::size_t count = 0; count < graph.vertex_count(); ++count) {
+        const std::size_t current = extract_minimum_vertex(
+            result.distance,
+            settled
+        );
+        if (current == ShortestPathResult::no_parent ||
+            result.distance[current] ==
+                std::numeric_limits<double>::infinity()) {
+            break;
+        }
+
+        settled[current] = 1;
+        for (const Edge& edge : graph.neighbors(current)) {
+            if (settled[edge.vertex] != 0) {
+                continue;
+            }
+            const double candidate = result.distance[current] + edge.weight;
+            if (candidate < result.distance[edge.vertex]) {
+                result.distance[edge.vertex] = candidate;
+                result.parent[edge.vertex] = current;
+            }
+        }
+    }
+
+    return result;
 }
 
 bool DepthFirstSearchResult::was_visited(std::size_t vertex) const {
