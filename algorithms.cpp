@@ -75,21 +75,182 @@ void reject_negative_weights(const Graph& graph) {
     }
 }
 
-std::size_t extract_minimum_vertex(
-    const std::vector<double>& distance,
-    const std::vector<unsigned char>& settled
-) {
-    std::size_t minimum = ShortestPathResult::no_parent;
-    for (std::size_t vertex = 0; vertex < distance.size(); ++vertex) {
-        if (settled[vertex] != 0) {
-            continue;
+class LinearMinQueue {
+public:
+    explicit LinearMinQueue(const std::vector<double>& distance)
+        : distance_(distance),
+          pending_(distance.size(), 1),
+          size_(distance.size()) {}
+
+    bool empty() const noexcept {
+        return size_ == 0;
+    }
+
+    bool contains(std::size_t vertex) const noexcept {
+        return pending_[vertex] != 0;
+    }
+
+    std::size_t extract_minimum() {
+        std::size_t minimum = ShortestPathResult::no_parent;
+        for (std::size_t vertex = 0; vertex < distance_.size(); ++vertex) {
+            if (!contains(vertex)) {
+                continue;
+            }
+            if (minimum == ShortestPathResult::no_parent ||
+                distance_[vertex] < distance_[minimum]) {
+                minimum = vertex;
+            }
         }
-        if (minimum == ShortestPathResult::no_parent ||
-            distance[vertex] < distance[minimum]) {
-            minimum = vertex;
+        if (minimum != ShortestPathResult::no_parent) {
+            pending_[minimum] = 0;
+            --size_;
+        }
+        return minimum;
+    }
+
+    void decrease_key(std::size_t) noexcept {}
+
+private:
+    const std::vector<double>& distance_;
+    std::vector<unsigned char> pending_;
+    std::size_t size_;
+};
+
+class IndexedMinHeap {
+public:
+    explicit IndexedMinHeap(const std::vector<double>& distance)
+        : distance_(distance),
+          heap_(distance.size()),
+          position_(distance.size()) {
+        std::iota(heap_.begin(), heap_.end(), std::size_t{0});
+        std::iota(position_.begin(), position_.end(), std::size_t{0});
+        for (std::size_t index = heap_.size() / 2; index > 0; --index) {
+            sift_down(index - 1);
         }
     }
-    return minimum;
+
+    bool empty() const noexcept {
+        return heap_.empty();
+    }
+
+    bool contains(std::size_t vertex) const noexcept {
+        return position_[vertex] != no_position;
+    }
+
+    std::size_t extract_minimum() {
+        if (heap_.empty()) {
+            return ShortestPathResult::no_parent;
+        }
+
+        const std::size_t minimum = heap_.front();
+        swap_positions(0, heap_.size() - 1);
+        heap_.pop_back();
+        position_[minimum] = no_position;
+        if (!heap_.empty()) {
+            sift_down(0);
+        }
+        return minimum;
+    }
+
+    void decrease_key(std::size_t vertex) {
+        sift_up(position_[vertex]);
+    }
+
+private:
+    static constexpr std::size_t no_position =
+        std::numeric_limits<std::size_t>::max();
+
+    bool precedes(std::size_t left, std::size_t right) const noexcept {
+        return distance_[left] < distance_[right] ||
+               (distance_[left] == distance_[right] && left < right);
+    }
+
+    void swap_positions(std::size_t left, std::size_t right) {
+        std::swap(heap_[left], heap_[right]);
+        position_[heap_[left]] = left;
+        position_[heap_[right]] = right;
+    }
+
+    void sift_up(std::size_t index) {
+        while (index > 0) {
+            const std::size_t parent = (index - 1) / 2;
+            if (!precedes(heap_[index], heap_[parent])) {
+                break;
+            }
+            swap_positions(index, parent);
+            index = parent;
+        }
+    }
+
+    void sift_down(std::size_t index) {
+        while (true) {
+            const std::size_t left = index * 2 + 1;
+            const std::size_t right = left + 1;
+            std::size_t smallest = index;
+
+            if (left < heap_.size() &&
+                precedes(heap_[left], heap_[smallest])) {
+                smallest = left;
+            }
+            if (right < heap_.size() &&
+                precedes(heap_[right], heap_[smallest])) {
+                smallest = right;
+            }
+            if (smallest == index) {
+                break;
+            }
+            swap_positions(index, smallest);
+            index = smallest;
+        }
+    }
+
+    const std::vector<double>& distance_;
+    std::vector<std::size_t> heap_;
+    std::vector<std::size_t> position_;
+};
+
+template <typename MinQueue>
+ShortestPathResult run_dijkstra(
+    const Graph& graph,
+    std::size_t source
+) {
+    if (source >= graph.vertex_count()) {
+        throw std::out_of_range("vertice inicial fora do intervalo do grafo");
+    }
+    reject_negative_weights(graph);
+
+    ShortestPathResult result;
+    result.source = source;
+    result.distance.assign(
+        graph.vertex_count(),
+        std::numeric_limits<double>::infinity()
+    );
+    result.parent.assign(graph.vertex_count(), ShortestPathResult::no_parent);
+    result.distance[source] = 0.0;
+    result.parent[source] = source;
+
+    MinQueue pending(result.distance);
+    while (!pending.empty()) {
+        const std::size_t current = pending.extract_minimum();
+        if (result.distance[current] ==
+            std::numeric_limits<double>::infinity()) {
+            break;
+        }
+
+        for (const Edge& edge : graph.neighbors(current)) {
+            if (!pending.contains(edge.vertex)) {
+                continue;
+            }
+            const double candidate = result.distance[current] + edge.weight;
+            if (candidate < result.distance[edge.vertex]) {
+                result.distance[edge.vertex] = candidate;
+                result.parent[edge.vertex] = current;
+                pending.decrease_key(edge.vertex);
+            }
+        }
+    }
+
+    return result;
 }
 
 } // namespace
@@ -251,51 +412,14 @@ ShortestPathResult dijkstra_vector(
     const Graph& graph,
     std::size_t source
 ) {
-    if (source >= graph.vertex_count()) {
-        throw std::out_of_range("vertice inicial fora do intervalo do grafo");
-    }
-    reject_negative_weights(graph);
+    return run_dijkstra<LinearMinQueue>(graph, source);
+}
 
-    ShortestPathResult result;
-    result.source = source;
-    result.distance.assign(
-        graph.vertex_count(),
-        std::numeric_limits<double>::infinity()
-    );
-    result.parent.assign(graph.vertex_count(), ShortestPathResult::no_parent);
-
-    std::vector<unsigned char> settled(
-        graph.vertex_count(),
-        static_cast<unsigned char>(0)
-    );
-    result.distance[source] = 0.0;
-    result.parent[source] = source;
-
-    for (std::size_t count = 0; count < graph.vertex_count(); ++count) {
-        const std::size_t current = extract_minimum_vertex(
-            result.distance,
-            settled
-        );
-        if (current == ShortestPathResult::no_parent ||
-            result.distance[current] ==
-                std::numeric_limits<double>::infinity()) {
-            break;
-        }
-
-        settled[current] = 1;
-        for (const Edge& edge : graph.neighbors(current)) {
-            if (settled[edge.vertex] != 0) {
-                continue;
-            }
-            const double candidate = result.distance[current] + edge.weight;
-            if (candidate < result.distance[edge.vertex]) {
-                result.distance[edge.vertex] = candidate;
-                result.parent[edge.vertex] = current;
-            }
-        }
-    }
-
-    return result;
+ShortestPathResult dijkstra_heap(
+    const Graph& graph,
+    std::size_t source
+) {
+    return run_dijkstra<IndexedMinHeap>(graph, source);
 }
 
 bool DepthFirstSearchResult::was_visited(std::size_t vertex) const {

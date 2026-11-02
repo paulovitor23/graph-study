@@ -61,6 +61,11 @@ ShortestPathResult dijkstra_vector(
     std::size_t source
 );
 
+ShortestPathResult dijkstra_heap(
+    const Graph& graph,
+    std::size_t source
+);
+
 struct DepthFirstSearchResult {
     static constexpr std::size_t not_visited =
         std::numeric_limits<std::size_t>::max();

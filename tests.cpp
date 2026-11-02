@@ -258,7 +258,7 @@ void verify_breadth_first_search(GraphRepresentation representation) {
     assert(distance(*graph, 0, 5) == std::nullopt);
 }
 
-void verify_dijkstra_vector(GraphRepresentation representation) {
+void verify_dijkstra_algorithms(GraphRepresentation representation) {
     auto graph = make_graph(7, representation);
     graph->add_edge(0, 1, 7.0);
     graph->add_edge(0, 2, 9.0);
@@ -271,6 +271,11 @@ void verify_dijkstra_vector(GraphRepresentation representation) {
     graph->add_edge(4, 5, 9.0);
 
     const auto result = dijkstra_vector(*graph, 0);
+    const auto heap_result = dijkstra_heap(*graph, 0);
+    assert(heap_result.source == result.source);
+    assert(heap_result.distance == result.distance);
+    assert(heap_result.parent == result.parent);
+
     assert(result.source == 0);
     assert(result.distance[0] == 0.0);
     assert(result.distance[1] == 7.0);
@@ -287,6 +292,8 @@ void verify_dijkstra_vector(GraphRepresentation representation) {
     assert(result.path_to(6).empty());
     assert(result.was_reached(5));
     assert(!result.was_reached(6));
+    assert(heap_result.path_to(4) == result.path_to(4));
+    assert(heap_result.path_to(6).empty());
 }
 
 void verify_dijkstra_zero_weight(GraphRepresentation representation) {
@@ -296,6 +303,9 @@ void verify_dijkstra_zero_weight(GraphRepresentation representation) {
     graph->add_edge(0, 2, 5.0);
 
     const auto result = dijkstra_vector(*graph, 0);
+    const auto heap_result = dijkstra_heap(*graph, 0);
+    assert(heap_result.distance == result.distance);
+    assert(heap_result.parent == result.parent);
     assert(result.distance[1] == 0.0);
     assert(result.distance[2] == 2.0);
     assert((result.path_to(2) == std::vector<std::size_t>{0, 1, 2}));
@@ -308,8 +318,25 @@ void verify_dijkstra_real_weights(GraphRepresentation representation) {
     graph->add_edge(0, 2, 0.5);
 
     const auto result = dijkstra_vector(*graph, 0);
+    const auto heap_result = dijkstra_heap(*graph, 0);
+    assert(heap_result.distance == result.distance);
+    assert(heap_result.parent == result.parent);
     assert(std::abs(result.distance[2] - 0.3) < 1e-12);
     assert((result.path_to(2) == std::vector<std::size_t>{0, 1, 2}));
+}
+
+void verify_dijkstra_tie_break(GraphRepresentation representation) {
+    auto graph = make_graph(4, representation);
+    graph->add_edge(0, 2, 1.0);
+    graph->add_edge(0, 1, 1.0);
+    graph->add_edge(2, 3, 1.0);
+    graph->add_edge(1, 3, 1.0);
+
+    const auto vector_result = dijkstra_vector(*graph, 0);
+    const auto heap_result = dijkstra_heap(*graph, 0);
+    assert(vector_result.distance == heap_result.distance);
+    assert(vector_result.parent == heap_result.parent);
+    assert(vector_result.parent[3] == 1);
 }
 
 void verify_dijkstra_rejects_negative_weight(
@@ -326,6 +353,14 @@ void verify_dijkstra_rejects_negative_weight(
         rejected = true;
     }
     assert(rejected);
+
+    rejected = false;
+    try {
+        dijkstra_heap(*graph, 0);
+    } catch (const std::domain_error&) {
+        rejected = true;
+    }
+    assert(rejected);
 }
 
 void verify_dijkstra_invalid_vertices(GraphRepresentation representation) {
@@ -338,12 +373,28 @@ void verify_dijkstra_invalid_vertices(GraphRepresentation representation) {
     }
     assert(empty_graph_rejected);
 
+    empty_graph_rejected = false;
+    try {
+        dijkstra_heap(*empty_graph, 0);
+    } catch (const std::out_of_range&) {
+        empty_graph_rejected = true;
+    }
+    assert(empty_graph_rejected);
+
     auto graph = make_graph(2, representation);
     graph->add_edge(0, 1, 1.0);
 
     bool invalid_source_rejected = false;
     try {
         dijkstra_vector(*graph, 2);
+    } catch (const std::out_of_range&) {
+        invalid_source_rejected = true;
+    }
+    assert(invalid_source_rejected);
+
+    invalid_source_rejected = false;
+    try {
+        dijkstra_heap(*graph, 2);
     } catch (const std::out_of_range&) {
         invalid_source_rejected = true;
     }
@@ -494,12 +545,14 @@ int main() {
     verify_empty_graph_statistics(GraphRepresentation::AdjacencyMatrix);
     verify_breadth_first_search(GraphRepresentation::AdjacencyList);
     verify_breadth_first_search(GraphRepresentation::AdjacencyMatrix);
-    verify_dijkstra_vector(GraphRepresentation::AdjacencyList);
-    verify_dijkstra_vector(GraphRepresentation::AdjacencyMatrix);
+    verify_dijkstra_algorithms(GraphRepresentation::AdjacencyList);
+    verify_dijkstra_algorithms(GraphRepresentation::AdjacencyMatrix);
     verify_dijkstra_zero_weight(GraphRepresentation::AdjacencyList);
     verify_dijkstra_zero_weight(GraphRepresentation::AdjacencyMatrix);
     verify_dijkstra_real_weights(GraphRepresentation::AdjacencyList);
     verify_dijkstra_real_weights(GraphRepresentation::AdjacencyMatrix);
+    verify_dijkstra_tie_break(GraphRepresentation::AdjacencyList);
+    verify_dijkstra_tie_break(GraphRepresentation::AdjacencyMatrix);
     verify_dijkstra_rejects_negative_weight(
         GraphRepresentation::AdjacencyList
     );

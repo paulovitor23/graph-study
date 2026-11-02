@@ -16,7 +16,8 @@ para o trabalho de Teoria dos Grafos.
 - busca em profundidade (DFS), com pai, nível e ordem de visita;
 - componentes conexas, ordenadas por tamanho decrescente;
 - distância entre dois vértices usando BFS;
-- Dijkstra com seleção linear em vetor, distâncias e caminhos mínimos;
+- Dijkstra com seleção linear ou heap mínimo indexado;
+- distâncias e reconstrução de caminhos mínimos;
 - diâmetro exato;
 - aproximação do diâmetro para grafos grandes.
 
