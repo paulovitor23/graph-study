@@ -1,8 +1,10 @@
 #include "graph.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <limits>
+#include <sstream>
 #include <stdexcept>
 
 namespace {
@@ -13,6 +15,12 @@ std::size_t matrix_size(std::size_t vertex_count) {
         throw std::length_error("grafo grande demais para a matriz de adjacencia");
     }
     return vertex_count * vertex_count;
+}
+
+void validate_weight(double weight) {
+    if (!std::isfinite(weight)) {
+        throw std::invalid_argument("peso da aresta deve ser finito");
+    }
 }
 
 } // namespace
@@ -40,17 +48,30 @@ void Graph::register_edge() noexcept {
 AdjacencyListGraph::AdjacencyListGraph(std::size_t vertex_count)
     : Graph(vertex_count), adjacency_(vertex_count) {}
 
-void AdjacencyListGraph::add_edge(std::size_t u, std::size_t v) {
+void AdjacencyListGraph::add_edge(
+    std::size_t u,
+    std::size_t v,
+    double weight
+) {
     validate_vertex(u);
     validate_vertex(v);
+    validate_weight(weight);
 
-    if (has_edge(u, v)) {
-        return;
+    const auto existing = std::find_if(
+        adjacency_[u].begin(),
+        adjacency_[u].end(),
+        [v](const Edge& edge) { return edge.vertex == v; }
+    );
+    if (existing != adjacency_[u].end()) {
+        if (existing->weight == weight) {
+            return;
+        }
+        throw std::invalid_argument("aresta repetida com peso diferente");
     }
 
-    adjacency_[u].push_back(v);
+    adjacency_[u].push_back({v, weight});
     if (u != v) {
-        adjacency_[v].push_back(u);
+        adjacency_[v].push_back({u, weight});
     }
     register_edge();
 }
@@ -59,17 +80,24 @@ bool AdjacencyListGraph::has_edge(std::size_t u, std::size_t v) const {
     validate_vertex(u);
     validate_vertex(v);
     const auto& adjacent = adjacency_[u];
-    return std::find(adjacent.begin(), adjacent.end(), v) != adjacent.end();
+    return std::any_of(
+        adjacent.begin(),
+        adjacent.end(),
+        [v](const Edge& edge) { return edge.vertex == v; }
+    );
 }
 
-std::vector<std::size_t> AdjacencyListGraph::neighbors(std::size_t vertex) const {
+std::vector<Edge> AdjacencyListGraph::neighbors(std::size_t vertex) const {
     validate_vertex(vertex);
     return adjacency_[vertex];
 }
 
 AdjacencyMatrixGraph::AdjacencyMatrixGraph(std::size_t vertex_count)
     : Graph(vertex_count),
-      adjacency_(matrix_size(vertex_count), static_cast<unsigned char>(0)) {}
+      adjacency_(
+          matrix_size(vertex_count),
+          std::numeric_limits<double>::quiet_NaN()
+      ) {}
 
 std::size_t AdjacencyMatrixGraph::index(
     std::size_t row,
@@ -78,34 +106,44 @@ std::size_t AdjacencyMatrixGraph::index(
     return row * vertex_count() + column;
 }
 
-void AdjacencyMatrixGraph::add_edge(std::size_t u, std::size_t v) {
+void AdjacencyMatrixGraph::add_edge(
+    std::size_t u,
+    std::size_t v,
+    double weight
+) {
     validate_vertex(u);
     validate_vertex(v);
+    validate_weight(weight);
 
-    if (adjacency_[index(u, v)] != 0) {
-        return;
+    const double existing = adjacency_[index(u, v)];
+    if (!std::isnan(existing)) {
+        if (existing == weight) {
+            return;
+        }
+        throw std::invalid_argument("aresta repetida com peso diferente");
     }
 
-    adjacency_[index(u, v)] = 1;
-    adjacency_[index(v, u)] = 1;
+    adjacency_[index(u, v)] = weight;
+    adjacency_[index(v, u)] = weight;
     register_edge();
 }
 
 bool AdjacencyMatrixGraph::has_edge(std::size_t u, std::size_t v) const {
     validate_vertex(u);
     validate_vertex(v);
-    return adjacency_[index(u, v)] != 0;
+    return !std::isnan(adjacency_[index(u, v)]);
 }
 
-std::vector<std::size_t> AdjacencyMatrixGraph::neighbors(
+std::vector<Edge> AdjacencyMatrixGraph::neighbors(
     std::size_t vertex
 ) const {
     validate_vertex(vertex);
 
-    std::vector<std::size_t> result;
+    std::vector<Edge> result;
     for (std::size_t candidate = 0; candidate < vertex_count(); ++candidate) {
-        if (adjacency_[index(vertex, candidate)] != 0) {
-            result.push_back(candidate);
+        const double weight = adjacency_[index(vertex, candidate)];
+        if (!std::isnan(weight)) {
+            result.push_back({candidate, weight});
         }
     }
     return result;
@@ -130,32 +168,48 @@ std::unique_ptr<Graph> read_graph_from_file(
         throw std::runtime_error("nao foi possivel abrir o arquivo: " + path);
     }
 
+    std::string line;
+    if (!std::getline(input, line)) {
+        throw std::runtime_error("numero de vertices ausente ou invalido");
+    }
+    std::istringstream header(line);
     std::size_t vertex_count = 0;
-    if (!(input >> vertex_count)) {
+    std::string extra;
+    if (!(header >> vertex_count) || (header >> extra)) {
         throw std::runtime_error("numero de vertices ausente ou invalido");
     }
 
     auto graph = make_graph(vertex_count, representation);
-    std::size_t file_u = 0;
-    std::size_t file_v = 0;
-
-    while (true) {
-        if (!(input >> file_u)) {
-            if (input.eof()) {
-                break;
-            }
-            throw std::runtime_error("linha de aresta invalida no arquivo");
+    while (std::getline(input, line)) {
+        if (line.find_first_not_of(" \t\r") == std::string::npos) {
+            continue;
         }
-        if (!(input >> file_v)) {
+
+        std::istringstream edge_input(line);
+        std::size_t file_u = 0;
+        std::size_t file_v = 0;
+        double weight = 1.0;
+        if (!(edge_input >> file_u >> file_v)) {
             throw std::runtime_error("aresta incompleta ou invalida no arquivo");
         }
+        edge_input >> std::ws;
+        if (!edge_input.eof()) {
+            if (!(edge_input >> weight)) {
+                throw std::runtime_error("peso da aresta invalido no arquivo");
+            }
+            edge_input >> std::ws;
+            if (!edge_input.eof()) {
+                throw std::runtime_error("linha de aresta possui colunas extras");
+            }
+        }
+        validate_weight(weight);
 
         // O enunciado numera os vertices a partir de 1; internamente usamos 0.
         if (file_u == 0 || file_v == 0 ||
             file_u > vertex_count || file_v > vertex_count) {
             throw std::runtime_error("aresta contem vertice fora do intervalo");
         }
-        graph->add_edge(file_u - 1, file_v - 1);
+        graph->add_edge(file_u - 1, file_v - 1, weight);
     }
 
     return graph;

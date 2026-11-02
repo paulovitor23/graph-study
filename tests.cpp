@@ -6,11 +6,25 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <memory>
 #include <stdexcept>
 #include <vector>
 
 namespace {
+
+double edge_weight(
+    const Graph& graph,
+    std::size_t source,
+    std::size_t destination
+) {
+    for (const Edge& edge : graph.neighbors(source)) {
+        if (edge.vertex == destination) {
+            return edge.weight;
+        }
+    }
+    throw std::runtime_error("aresta esperada nao encontrada no teste");
+}
 
 void verify_representation(GraphRepresentation representation) {
     auto graph = make_graph(5, representation);
@@ -29,8 +43,53 @@ void verify_representation(GraphRepresentation representation) {
     assert(!graph->has_edge(0, 2));
 
     auto adjacent = graph->neighbors(4);
-    std::sort(adjacent.begin(), adjacent.end());
-    assert((adjacent == std::vector<std::size_t>{0, 1, 2, 3}));
+    std::sort(
+        adjacent.begin(),
+        adjacent.end(),
+        [](const Edge& left, const Edge& right) {
+            return left.vertex < right.vertex;
+        }
+    );
+    assert(adjacent.size() == 4);
+    for (std::size_t index = 0; index < adjacent.size(); ++index) {
+        assert(adjacent[index].vertex == index);
+        assert(adjacent[index].weight == 1.0);
+    }
+}
+
+void verify_weighted_edges(GraphRepresentation representation) {
+    auto graph = make_graph(4, representation);
+    graph->add_edge(0, 1, 2.5);
+    graph->add_edge(1, 2, 0.0);
+    graph->add_edge(2, 3, -4.25);
+    graph->add_edge(0, 1, 2.5);
+
+    assert(graph->edge_count() == 3);
+    assert(edge_weight(*graph, 0, 1) == 2.5);
+    assert(edge_weight(*graph, 1, 0) == 2.5);
+    assert(edge_weight(*graph, 1, 2) == 0.0);
+    assert(edge_weight(*graph, 2, 3) == -4.25);
+    assert(edge_weight(*graph, 3, 2) == -4.25);
+
+    bool conflicting_weight_rejected = false;
+    try {
+        graph->add_edge(1, 0, 3.0);
+    } catch (const std::invalid_argument&) {
+        conflicting_weight_rejected = true;
+    }
+    assert(conflicting_weight_rejected);
+
+    bool infinite_weight_rejected = false;
+    try {
+        graph->add_edge(
+            0,
+            3,
+            std::numeric_limits<double>::infinity()
+        );
+    } catch (const std::invalid_argument&) {
+        infinite_weight_rejected = true;
+    }
+    assert(infinite_weight_rejected);
 }
 
 void verify_file_reader(GraphRepresentation representation) {
@@ -45,6 +104,24 @@ void verify_file_reader(GraphRepresentation representation) {
     assert(graph->edge_count() == 5);
     assert(graph->has_edge(0, 4));
     assert(graph->has_edge(4, 3));
+
+    std::remove(path);
+}
+
+void verify_weighted_file_reader(GraphRepresentation representation) {
+    const char* path = "weighted_graph_test_input.txt";
+    {
+        std::ofstream output(path);
+        output << "5\n1 2 0.1\n2 5 0\n5 3 -9.5\n3 4 2.3\n";
+    }
+
+    auto graph = read_graph_from_file(path, representation);
+    assert(graph->vertex_count() == 5);
+    assert(graph->edge_count() == 4);
+    assert(edge_weight(*graph, 0, 1) == 0.1);
+    assert(edge_weight(*graph, 1, 4) == 0.0);
+    assert(edge_weight(*graph, 4, 2) == -9.5);
+    assert(edge_weight(*graph, 2, 3) == 2.3);
 
     std::remove(path);
 }
@@ -66,6 +143,40 @@ void verify_incomplete_edge_is_rejected(GraphRepresentation representation) {
     if (!rejected) {
         throw std::runtime_error("leitor aceitou uma aresta incompleta");
     }
+}
+
+void verify_invalid_weight_is_rejected(GraphRepresentation representation) {
+    const char* path = "graph_test_invalid_weight.txt";
+    {
+        std::ofstream output(path);
+        output << "3\n1 2 peso\n";
+    }
+
+    bool rejected = false;
+    try {
+        read_graph_from_file(path, representation);
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    std::remove(path);
+    assert(rejected);
+}
+
+void verify_extra_column_is_rejected(GraphRepresentation representation) {
+    const char* path = "graph_test_extra_column.txt";
+    {
+        std::ofstream output(path);
+        output << "3\n1 2 4.5 extra\n";
+    }
+
+    bool rejected = false;
+    try {
+        read_graph_from_file(path, representation);
+    } catch (const std::runtime_error&) {
+        rejected = true;
+    }
+    std::remove(path);
+    assert(rejected);
 }
 
 void verify_statistics(GraphRepresentation representation) {
@@ -261,10 +372,18 @@ void verify_empty_graph_diameter(GraphRepresentation representation) {
 int main() {
     verify_representation(GraphRepresentation::AdjacencyList);
     verify_representation(GraphRepresentation::AdjacencyMatrix);
+    verify_weighted_edges(GraphRepresentation::AdjacencyList);
+    verify_weighted_edges(GraphRepresentation::AdjacencyMatrix);
     verify_file_reader(GraphRepresentation::AdjacencyList);
     verify_file_reader(GraphRepresentation::AdjacencyMatrix);
+    verify_weighted_file_reader(GraphRepresentation::AdjacencyList);
+    verify_weighted_file_reader(GraphRepresentation::AdjacencyMatrix);
     verify_incomplete_edge_is_rejected(GraphRepresentation::AdjacencyList);
     verify_incomplete_edge_is_rejected(GraphRepresentation::AdjacencyMatrix);
+    verify_invalid_weight_is_rejected(GraphRepresentation::AdjacencyList);
+    verify_invalid_weight_is_rejected(GraphRepresentation::AdjacencyMatrix);
+    verify_extra_column_is_rejected(GraphRepresentation::AdjacencyList);
+    verify_extra_column_is_rejected(GraphRepresentation::AdjacencyMatrix);
     verify_statistics(GraphRepresentation::AdjacencyList);
     verify_statistics(GraphRepresentation::AdjacencyMatrix);
     verify_even_degree_median(GraphRepresentation::AdjacencyList);

@@ -36,7 +36,8 @@ DistanceSearchResult breadth_first_distances(
         const std::size_t current = pending.front();
         pending.pop();
 
-        for (const std::size_t adjacent : graph.neighbors(current)) {
+        for (const Edge& edge : graph.neighbors(current)) {
+            const std::size_t adjacent = edge.vertex;
             if (result.distances[adjacent] !=
                 BreadthFirstSearchResult::not_visited) {
                 continue;
@@ -155,7 +156,8 @@ BreadthFirstSearchResult breadth_first_search(
         pending.pop();
         result.visit_order.push_back(current);
 
-        for (const std::size_t adjacent : graph.neighbors(current)) {
+        for (const Edge& edge : graph.neighbors(current)) {
+            const std::size_t adjacent = edge.vertex;
             if (result.level[adjacent] != BreadthFirstSearchResult::not_visited) {
                 continue;
             }
@@ -214,7 +216,7 @@ DepthFirstSearchResult depth_first_search(
 
     struct StackFrame {
         std::size_t vertex;
-        std::vector<std::size_t> adjacent_vertices;
+        std::vector<Edge> adjacent_edges;
         std::size_t next_neighbor = 0;
     };
 
@@ -229,13 +231,13 @@ DepthFirstSearchResult depth_first_search(
     while (!stack.empty()) {
         StackFrame& frame = stack.back();
 
-        if (frame.next_neighbor >= frame.adjacent_vertices.size()) {
+        if (frame.next_neighbor >= frame.adjacent_edges.size()) {
             stack.pop_back();
             continue;
         }
 
         const std::size_t adjacent =
-            frame.adjacent_vertices[frame.next_neighbor++];
+            frame.adjacent_edges[frame.next_neighbor++].vertex;
         if (result.level[adjacent] != DepthFirstSearchResult::not_visited) {
             continue;
         }
@@ -276,7 +278,8 @@ std::vector<ConnectedComponent> connected_components(const Graph& graph) {
             pending.pop_back();
             component.vertices.push_back(current);
 
-            for (const std::size_t adjacent : graph.neighbors(current)) {
+            for (const Edge& edge : graph.neighbors(current)) {
+                const std::size_t adjacent = edge.vertex;
                 if (visited[adjacent] != 0) {
                     continue;
                 }

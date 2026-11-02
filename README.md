@@ -7,7 +7,8 @@ para o trabalho de Teoria dos Grafos.
 
 - representação por lista de adjacência;
 - representação por matriz de adjacência;
-- leitura do grafo a partir de arquivo texto;
+- arestas com pesos reais;
+- leitura de arquivos com ou sem a coluna de peso;
 - número de vértices e arestas;
 - grau de cada vértice;
 - grau mínimo, máximo, médio e mediana dos graus.
@@ -17,6 +18,22 @@ para o trabalho de Teoria dos Grafos.
 - distância entre dois vértices usando BFS;
 - diâmetro exato;
 - aproximação do diâmetro para grafos grandes.
+
+## Formato de entrada
+
+A primeira linha contém o número de vértices. Cada linha seguinte contém os
+dois vértices e, opcionalmente, o peso da aresta:
+
+```text
+5
+1 2 0.1
+2 5 0.2
+5 3 5
+```
+
+Quando o peso é omitido, a aresta recebe peso `1.0`, mantendo compatibilidade
+com os arquivos da primeira parte. Pesos negativos podem ser armazenados; a
+restrição deles será tratada pelos algoritmos que não os suportam.
 
 ## Próximas etapas
 

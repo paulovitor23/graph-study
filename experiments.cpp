@@ -130,7 +130,11 @@ void verify_matrix_viability(
         vertices > std::numeric_limits<std::size_t>::max() / vertices) {
         throw std::runtime_error("matriz inviavel: tamanho excede size_t");
     }
-    const std::size_t estimate = vertices * vertices;
+    const std::size_t cells = vertices * vertices;
+    if (cells > std::numeric_limits<std::size_t>::max() / sizeof(double)) {
+        throw std::runtime_error("matriz inviavel: tamanho excede size_t");
+    }
+    const std::size_t estimate = cells * sizeof(double);
     const std::size_t physical = physical_memory_bytes();
     constexpr std::size_t absolute_limit =
         static_cast<std::size_t>(16) * 1024 * 1024 * 1024;
