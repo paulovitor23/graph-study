@@ -120,3 +120,15 @@ Leitura, escrita e geração da amostra ficam fora do intervalo cronometrado. O
 programa alterna qual implementação executa primeiro, interrompe antes das
 medições quando encontra peso negativo e confere se os dois Dijkstras
 produziram as mesmas distâncias.
+
+## Rede de pesquisadores
+
+O estudo identifica os pesquisadores pela grafia exata do arquivo de nomes e
+gera as distâncias e os caminhos com identificadores e nomes completos:
+
+```bash
+./build/researcher_experiments \
+    data_parte2/rede_colaboracao.txt \
+    data_parte2/rede_colaboracao_vertices.txt \
+    resultados/parte2/rede_pesquisadores.csv
+```

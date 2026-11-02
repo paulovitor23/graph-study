@@ -85,14 +85,30 @@ quadrático da versão linear. O W6 foi mais lento que o W5 apesar de ambos tere
 arestas únicas. O W7 apresentou o maior custo devido aos 50 milhões de
 vértices e às estruturas auxiliares de distância, pais, heap e posições.
 
-O estudo da rede de pesquisadores ainda não foi executado porque nenhum dos
-arquivos anexados contém nomes ou uma tabela de correspondência entre nomes e
-índices. Esse arquivo continua necessário para responder à última parte do
-enunciado sem inventar identificadores.
+## Rede de colaboração entre pesquisadores
+
+A rede possui 722.385 pesquisadores. Os nomes foram procurados pela grafia
+exata exigida no enunciado, e o Dijkstra com heap foi executado uma única vez
+a partir de Edsger W. Dijkstra. O peso representa proximidade inversamente
+proporcional à quantidade de artigos em coautoria; portanto, o caminho mínimo
+favorece relações de colaboração mais próximas.
+
+| Destino | ID | Distância | Caminho mínimo |
+|---|---:|---:|---|
+| Alan M. Turing | 11.365 | sem caminho | componente desconectada |
+| J. B. Kruskal | 471.365 | 3,480368 | Edsger W. Dijkstra → John R. Rice → Dan C. Marinescu → Howard Jay Siegel → Edwin K. P. Chong → Ness B. Shroff → R. Srikant → Albert G. Greenberg → J. B. Kruskal |
+| Jon M. Kleinberg | 5.709 | 2,706994 | Edsger W. Dijkstra → A. J. M. van Gasteren → Gerard Tel → Hans L. Bodlaender → Dimitrios M. Thilikos → Prabhakar Ragde → Avi Wigderson → Eli Upfal → Prabhakar Raghavan → Jon M. Kleinberg |
+| Éva Tardos | 11.386 | 2,753514 | Edsger W. Dijkstra → A. J. M. van Gasteren → Gerard Tel → Hans L. Bodlaender → Jan van Leeuwen → Mark H. Overmars → Micha Sharir → Haim Kaplan → Robert Endre Tarjan → Andrew V. Goldberg → Serge A. Plotkin → Éva Tardos |
+| Daniel R. Figueiredo | 343.930 | 2,942831 | Edsger W. Dijkstra → John R. Rice → Dan C. Marinescu → Chuang Lin → Bo Li → Y. Thomas Hou → Zhi-Li Zhang → Donald F. Towsley → Daniel R. Figueiredo |
+
+Alan M. Turing está em uma componente formada somente por ele e pelo vértice
+717.737, ligados por uma aresta de peso 1. Por isso, não existe caminho entre
+Edsger W. Dijkstra e Alan M. Turing nessa base.
 
 ## Arquivos consolidados
 
 - `resultados/parte2/resumo_distancias.csv`;
 - `resultados/parte2/resumo_desempenho.csv`;
+- `resultados/parte2/rede_pesquisadores.csv`;
 - arquivos individuais de caminhos, origens e benchmark em
   `resultados/parte2/`.
