@@ -35,6 +35,7 @@ public:
 
 protected:
     void validate_vertex(std::size_t vertex) const;
+    void register_weight(double weight) noexcept;
     void register_edge(double weight) noexcept;
 
 private:

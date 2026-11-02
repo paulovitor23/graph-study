@@ -35,7 +35,8 @@ dois vértices e, opcionalmente, o peso da aresta:
 
 Quando o peso é omitido, a aresta recebe peso `1.0`, mantendo compatibilidade
 com os arquivos da primeira parte. Pesos negativos podem ser armazenados; a
-execução do Dijkstra os rejeita com uma mensagem clara.
+execução do Dijkstra os rejeita com uma mensagem clara. Quando o arquivo
+repete o mesmo par de vértices, a biblioteca mantém o menor peso.
 
 ## Próximas etapas
 
@@ -97,7 +98,8 @@ as mesmas origens aleatórias. A semente padrão é `242`.
     data_parte2/grafo_1.txt \
     resultados/parte2/grafo_1 \
     100 \
-    242
+    242 \
+    both
 ```
 
 Argumentos:
@@ -106,6 +108,7 @@ Argumentos:
 2. prefixo dos arquivos de saída;
 3. quantidade de origens, com padrão `100`;
 4. semente aleatória, com padrão `242`.
+5. modo `both`, `vector` ou `heap`, com padrão `both`.
 
 Arquivos produzidos:
 

@@ -75,13 +75,12 @@ void verify_weighted_edges(GraphRepresentation representation) {
     assert(edge_weight(*graph, 2, 3) == -4.25);
     assert(edge_weight(*graph, 3, 2) == -4.25);
 
-    bool conflicting_weight_rejected = false;
-    try {
-        graph->add_edge(1, 0, 3.0);
-    } catch (const std::invalid_argument&) {
-        conflicting_weight_rejected = true;
-    }
-    assert(conflicting_weight_rejected);
+    graph->add_edge(1, 0, 3.0);
+    assert(edge_weight(*graph, 0, 1) == 2.5);
+    graph->add_edge(1, 0, 1.25);
+    assert(edge_weight(*graph, 0, 1) == 1.25);
+    assert(edge_weight(*graph, 1, 0) == 1.25);
+    assert(graph->edge_count() == 3);
 
     bool infinite_weight_rejected = false;
     try {

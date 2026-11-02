@@ -45,9 +45,13 @@ void Graph::validate_vertex(std::size_t vertex) const {
     }
 }
 
+void Graph::register_weight(double weight) noexcept {
+    has_negative_weight_ = has_negative_weight_ || weight < 0.0;
+}
+
 void Graph::register_edge(double weight) noexcept {
     ++edge_count_;
-    has_negative_weight_ = has_negative_weight_ || weight < 0.0;
+    register_weight(weight);
 }
 
 AdjacencyListGraph::AdjacencyListGraph(std::size_t vertex_count)
@@ -68,10 +72,19 @@ void AdjacencyListGraph::add_edge(
         [v](const Edge& edge) { return edge.vertex == v; }
     );
     if (existing != adjacency_[u].end()) {
-        if (existing->weight == weight) {
-            return;
+        if (weight < existing->weight) {
+            existing->weight = weight;
+            if (u != v) {
+                const auto reverse = std::find_if(
+                    adjacency_[v].begin(),
+                    adjacency_[v].end(),
+                    [u](const Edge& edge) { return edge.vertex == u; }
+                );
+                reverse->weight = weight;
+            }
+            register_weight(weight);
         }
-        throw std::invalid_argument("aresta repetida com peso diferente");
+        return;
     }
 
     adjacency_[u].push_back({v, weight});
@@ -122,10 +135,12 @@ void AdjacencyMatrixGraph::add_edge(
 
     const double existing = adjacency_[index(u, v)];
     if (!std::isnan(existing)) {
-        if (existing == weight) {
-            return;
+        if (weight < existing) {
+            adjacency_[index(u, v)] = weight;
+            adjacency_[index(v, u)] = weight;
+            register_weight(weight);
         }
-        throw std::invalid_argument("aresta repetida com peso diferente");
+        return;
     }
 
     adjacency_[index(u, v)] = weight;

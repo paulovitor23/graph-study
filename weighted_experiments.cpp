@@ -20,11 +20,18 @@ namespace {
 
 using Clock = std::chrono::steady_clock;
 
+enum class BenchmarkMode {
+    Both,
+    Vector,
+    Heap
+};
+
 struct Configuration {
     std::string input_path;
     std::string output_prefix;
     std::size_t source_count = 100;
     std::uint64_t seed = 242;
+    BenchmarkMode mode = BenchmarkMode::Both;
 };
 
 std::size_t parse_positive_size(const char* value, const char* field) {
@@ -45,11 +52,24 @@ std::uint64_t parse_seed(const char* value) {
     return result;
 }
 
+BenchmarkMode parse_mode(const std::string& value) {
+    if (value == "both") {
+        return BenchmarkMode::Both;
+    }
+    if (value == "vector") {
+        return BenchmarkMode::Vector;
+    }
+    if (value == "heap") {
+        return BenchmarkMode::Heap;
+    }
+    throw std::invalid_argument("modo deve ser both, vector ou heap");
+}
+
 Configuration parse_arguments(int argc, char* argv[]) {
-    if (argc < 3 || argc > 5) {
+    if (argc < 3 || argc > 6) {
         throw std::invalid_argument(
             "uso: weighted_graph_experiments <grafo.txt> <prefixo_saida> "
-            "[numero_origens] [semente]"
+            "[numero_origens] [semente] [both|vector|heap]"
         );
     }
 
@@ -59,6 +79,10 @@ Configuration parse_arguments(int argc, char* argv[]) {
     }
     if (argc == 5) {
         result.seed = parse_seed(argv[4]);
+    }
+    if (argc == 6) {
+        result.seed = parse_seed(argv[4]);
+        result.mode = parse_mode(argv[5]);
     }
     return result;
 }
@@ -98,42 +122,50 @@ ShortestPathResult measure(
 
 BenchmarkResult benchmark(
     const Graph& graph,
-    const std::vector<std::size_t>& sources
+    const std::vector<std::size_t>& sources,
+    BenchmarkMode mode
 ) {
     BenchmarkResult timing;
     for (std::size_t index = 0; index < sources.size(); ++index) {
         const std::size_t source = sources[index];
         ShortestPathResult vector_result;
         ShortestPathResult heap_result;
-        if (index % 2 == 0) {
-            vector_result = measure(
-                graph,
-                source,
-                dijkstra_vector,
-                timing.vector_total_ms
-            );
+        const bool run_vector = mode != BenchmarkMode::Heap;
+        const bool run_heap = mode != BenchmarkMode::Vector;
+        if (mode == BenchmarkMode::Both && index % 2 != 0) {
             heap_result = measure(
                 graph,
                 source,
                 dijkstra_heap,
                 timing.heap_total_ms
+            );
+            vector_result = measure(
+                graph,
+                source,
+                dijkstra_vector,
+                timing.vector_total_ms
             );
         } else {
-            heap_result = measure(
-                graph,
-                source,
-                dijkstra_heap,
-                timing.heap_total_ms
-            );
-            vector_result = measure(
-                graph,
-                source,
-                dijkstra_vector,
-                timing.vector_total_ms
-            );
+            if (run_vector) {
+                vector_result = measure(
+                    graph,
+                    source,
+                    dijkstra_vector,
+                    timing.vector_total_ms
+                );
+            }
+            if (run_heap) {
+                heap_result = measure(
+                    graph,
+                    source,
+                    dijkstra_heap,
+                    timing.heap_total_ms
+                );
+            }
         }
 
-        if (vector_result.distance != heap_result.distance) {
+        if (mode == BenchmarkMode::Both &&
+            vector_result.distance != heap_result.distance) {
             throw std::logic_error(
                 "Dijkstra com vetor e heap produziram distancias diferentes"
             );
@@ -206,7 +238,8 @@ void write_benchmark(
     const Graph& graph,
     const std::vector<std::size_t>& sources,
     std::uint64_t seed,
-    const BenchmarkResult& timing
+    const BenchmarkResult& timing,
+    BenchmarkMode mode
 ) {
     std::ofstream output(path);
     if (!output) {
@@ -216,14 +249,18 @@ void write_benchmark(
     output << "algorithm,vertices,edges,sources,seed,total_ms,average_ms\n"
            << std::fixed << std::setprecision(6);
     const double count = static_cast<double>(sources.size());
-    output << "vector," << graph.vertex_count() << ',' << graph.edge_count()
-           << ',' << sources.size() << ',' << seed << ','
-           << timing.vector_total_ms << ',' << timing.vector_total_ms / count
-           << '\n';
-    output << "heap," << graph.vertex_count() << ',' << graph.edge_count()
-           << ',' << sources.size() << ',' << seed << ','
-           << timing.heap_total_ms << ',' << timing.heap_total_ms / count
-           << '\n';
+    if (mode != BenchmarkMode::Heap) {
+        output << "vector," << graph.vertex_count() << ',' << graph.edge_count()
+               << ',' << sources.size() << ',' << seed << ','
+               << timing.vector_total_ms << ','
+               << timing.vector_total_ms / count << '\n';
+    }
+    if (mode != BenchmarkMode::Vector) {
+        output << "heap," << graph.vertex_count() << ',' << graph.edge_count()
+               << ',' << sources.size() << ',' << seed << ','
+               << timing.heap_total_ms << ',' << timing.heap_total_ms / count
+               << '\n';
+    }
 }
 
 void run(const Configuration& configuration) {
@@ -245,7 +282,7 @@ void run(const Configuration& configuration) {
         configuration.source_count,
         configuration.seed
     );
-    const auto timing = benchmark(*graph, sources);
+    const auto timing = benchmark(*graph, sources, configuration.mode);
 
     const std::filesystem::path prefix(configuration.output_prefix);
     if (prefix.has_parent_path()) {
@@ -263,7 +300,8 @@ void run(const Configuration& configuration) {
         *graph,
         sources,
         configuration.seed,
-        timing
+        timing,
+        configuration.mode
     );
 
     std::cout << "Experimento ponderado concluido.\n"
