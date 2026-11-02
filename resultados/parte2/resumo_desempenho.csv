@@ -1,0 +1,12 @@
+graph,algorithm,vertices,unique_edges,sources,seed,total_ms,average_ms,status
+W3,vector,100000,6099868,5,242,82420.070125,16484.014025,measured_same_sample
+W3,heap,100000,6099868,5,242,430.130083,86.026017,measured_same_sample
+W3,heap,100000,6099868,100,242,8986.991336,89.869913,measured_final
+W4,vector,1000000,30999944,0,242,,,not_run_quadratic_cost
+W4,heap,1000000,30999944,100,242,107306.018335,1073.060183,measured_final
+W5,vector,10000000,39999991,0,242,,,not_run_quadratic_cost
+W5,heap,10000000,39999991,10,242,106956.979291,10695.697929,measured_final
+W6,vector,10000000,73403372,0,242,,,not_run_quadratic_cost
+W6,heap,10000000,73403372,10,242,133392.709377,13339.270938,measured_final
+W7,vector,50000000,59999999,0,242,,,not_run_quadratic_cost
+W7,heap,50000000,59999999,5,242,628095.525042,125619.105008,measured_final

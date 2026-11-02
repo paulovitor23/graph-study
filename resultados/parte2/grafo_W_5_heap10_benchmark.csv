@@ -1,0 +1,2 @@
+algorithm,vertices,edges,sources,seed,total_ms,average_ms
+heap,10000000,39999991,10,242,106956.979291,10695.697929
