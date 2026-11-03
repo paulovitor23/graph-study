@@ -36,7 +36,7 @@ DistanceSearchResult breadth_first_distances(
         const std::size_t current = pending.front();
         pending.pop();
 
-        for (const Edge& edge : graph.neighbors(current)) {
+        for (const Edge& edge : graph.neighbor_view(current)) {
             const std::size_t adjacent = edge.vertex;
             if (result.distances[adjacent] !=
                 BreadthFirstSearchResult::not_visited) {
@@ -233,7 +233,7 @@ ShortestPathResult run_dijkstra(
             break;
         }
 
-        for (const Edge& edge : graph.neighbors(current)) {
+        for (const Edge& edge : graph.neighbor_view(current)) {
             if (!pending.contains(edge.vertex)) {
                 continue;
             }
@@ -252,7 +252,7 @@ ShortestPathResult run_dijkstra(
 } // namespace
 
 std::size_t degree(const Graph& graph, std::size_t vertex) {
-    return graph.neighbors(vertex).size();
+    return graph.neighbor_view(vertex).size();
 }
 
 std::vector<std::size_t> degrees(const Graph& graph) {
@@ -342,7 +342,7 @@ BreadthFirstSearchResult breadth_first_search(
         pending.pop();
         result.visit_order.push_back(current);
 
-        for (const Edge& edge : graph.neighbors(current)) {
+        for (const Edge& edge : graph.neighbor_view(current)) {
             const std::size_t adjacent = edge.vertex;
             if (result.level[adjacent] != BreadthFirstSearchResult::not_visited) {
                 continue;
@@ -447,7 +447,7 @@ DepthFirstSearchResult depth_first_search(
 
     struct StackFrame {
         std::size_t vertex;
-        std::vector<Edge> adjacent_edges;
+        NeighborRange adjacent_edges;
         std::size_t next_neighbor = 0;
     };
 
@@ -457,7 +457,7 @@ DepthFirstSearchResult depth_first_search(
     result.parent[source] = source;
     result.level[source] = 0;
     result.visit_order.push_back(source);
-    stack.push_back({source, graph.neighbors(source), 0});
+    stack.push_back({source, graph.neighbor_view(source), 0});
 
     while (!stack.empty()) {
         StackFrame& frame = stack.back();
@@ -476,7 +476,7 @@ DepthFirstSearchResult depth_first_search(
         result.parent[adjacent] = frame.vertex;
         result.level[adjacent] = result.level[frame.vertex] + 1;
         result.visit_order.push_back(adjacent);
-        stack.push_back({adjacent, graph.neighbors(adjacent), 0});
+        stack.push_back({adjacent, graph.neighbor_view(adjacent), 0});
     }
 
     return result;
@@ -509,7 +509,7 @@ std::vector<ConnectedComponent> connected_components(const Graph& graph) {
             pending.pop_back();
             component.vertices.push_back(current);
 
-            for (const Edge& edge : graph.neighbors(current)) {
+            for (const Edge& edge : graph.neighbor_view(current)) {
                 const std::size_t adjacent = edge.vertex;
                 if (visited[adjacent] != 0) {
                     continue;

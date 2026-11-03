@@ -45,9 +45,9 @@ repete o mesmo par de vértices, a biblioteca mantém o menor peso.
 ## Compilação e testes
 
 ```bash
-cmake -S . -B build
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 ```
 
 ## Experimentos da Parte 1
@@ -93,6 +93,12 @@ como `mb` no arquivo de saída), inclusive no Windows.
 O programa ponderado usa lista de adjacência e compara os dois Dijkstras sobre
 as mesmas origens aleatórias. A semente padrão é `242`.
 
+As origens são amostradas sem reposição pelo algoritmo de Floyd, usando O(k)
+de espaço, e gravadas no CSV. Essa amostragem difere da versão anterior, que
+embaralhava todos os V vértices. Para comparar versões ou plataformas, usar
+as mesmas origens registradas; apenas repetir a semente não garante a mesma
+amostra entre versões da biblioteca padrão.
+
 ```bash
 ./build/weighted_graph_experiments \
     data_parte2/grafo_1.txt \
@@ -107,8 +113,18 @@ Argumentos:
 1. caminho do grafo ponderado;
 2. prefixo dos arquivos de saída;
 3. quantidade de origens, com padrão `100`;
-4. semente aleatória, com padrão `242`.
-5. modo `both`, `vector` ou `heap`, com padrão `both`.
+4. semente aleatória, com padrão `242`;
+5. modo `both`, `vector` ou `heap`, com padrão `both`;
+6. opcional: CSV `order,source` para reutilizar exatamente uma amostra anterior.
+
+Quando o CSV de origens é fornecido, ele define a amostra e sua ordem; a
+semente fica apenas como metadado. A quantidade informada deve coincidir com
+a quantidade de linhas, e origens repetidas ou fora do grafo são rejeitadas.
+Por exemplo, para repetir as cinco origens históricas de W3:
+
+```sh
+./build/weighted_graph_experiments ../TP2/grafo_W_3.txt resultados/parte2/revisao_W3 5 242 both resultados/parte2/grafo_W_3_both_sources.csv
+```
 
 Arquivos produzidos:
 
@@ -120,6 +136,21 @@ Leitura, escrita e geração da amostra ficam fora do intervalo cronometrado. O
 programa alterna qual implementação executa primeiro, interrompe antes das
 medições quando encontra peso negativo e confere se os dois Dijkstras
 produziram as mesmas distâncias.
+
+Os testes usam verificações que continuam ativas em Release e com `NDEBUG`.
+Um teste adicional do CTest confirma que uma falha proposital retorna erro.
+
+Nos algoritmos, `neighbor_view` empresta os vizinhos da lista sem copiá-los;
+na matriz, materializa a lista correspondente. A vista emprestada só permanece
+válida enquanto o grafo existir e não for alterado. A interface `neighbors`
+continua disponível para obter uma cópia independente.
+
+A leitura de listas acumula as arestas e reduz duplicatas por vértice,
+mantendo o menor peso e a ordem de primeira ocorrência dos vizinhos.
+Isso evita a busca linear por duplicatas a cada linha: o custo de redução é
+O(∑ d(v) log d(v)), com memória temporária O(Δ), contando as incidências de
+entrada antes de remover duplicatas. A inserção individual por
+`add_edge` continua disponível e procura duplicatas linearmente no grau.
 
 ## Rede de pesquisadores
 

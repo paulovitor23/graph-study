@@ -2,7 +2,8 @@
 #include "graph.hpp"
 
 #include <algorithm>
-#include <cassert>
+#include "sampling.hpp"
+#include <string>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -13,6 +14,77 @@
 #include <vector>
 
 namespace {
+
+void require(bool condition, const char* expression, const char* file, int line) {
+    if (!condition) {
+        throw std::runtime_error(
+            std::string(file) + ':' + std::to_string(line) + ": " + expression
+        );
+    }
+}
+
+#define CHECK(condition) require((condition), #condition, __FILE__, __LINE__)
+
+void verify_sampling() {
+    CHECK(select_sources(0, 10, 242).empty());
+    CHECK(select_sources(10, 0, 242).empty());
+    for (std::size_t n : {1U, 5U, 100U, 50000000U}) {
+        auto sample = select_sources(n, 10, 242);
+        CHECK(sample == select_sources(n, 10, 242));
+        CHECK(sample.size() == std::min(n, std::size_t{10}));
+        CHECK(sample.capacity() <= 10);
+        std::sort(sample.begin(), sample.end());
+        CHECK(std::adjacent_find(sample.begin(), sample.end()) == sample.end());
+        CHECK(sample.back() < n);
+    }
+}
+
+void verify_bulk_loading(GraphRepresentation representation) {
+    const char* path = "graph_test_bulk.txt";
+    {
+        std::ofstream output(path);
+        output << "6\n1 4 8\n1 2 5\n4 1 2\n1 4 9\n1 1 4\n1 1 0\n2 1 3\n5 6 -1\n";
+    }
+    auto graph = read_graph_from_file(path, representation);
+    std::remove(path);
+    auto expected = make_graph(6, representation);
+    expected->add_edge(0, 3, 8);
+    expected->add_edge(0, 1, 5);
+    expected->add_edge(3, 0, 2);
+    expected->add_edge(0, 3, 9);
+    expected->add_edge(0, 0, 4);
+    expected->add_edge(0, 0, 0);
+    expected->add_edge(1, 0, 3);
+    expected->add_edge(4, 5, -1);
+    CHECK(graph->edge_count() == 4);
+    CHECK(graph->has_negative_weight());
+    for (std::size_t v = 0; v < 6; ++v) {
+        const auto actual = graph->neighbor_view(v);
+        const auto wanted = expected->neighbors(v);
+        CHECK(actual.size() == wanted.size());
+        for (std::size_t i = 0; i < wanted.size(); ++i) {
+            CHECK(actual[i].vertex == wanted[i].vertex);
+            CHECK(actual[i].weight == wanted[i].weight);
+        }
+    }
+    graph->add_edge(3, 0, 1);
+    CHECK(graph->edge_count() == 4);
+    CHECK(graph->neighbors(3).front().weight == 1);
+}
+
+void verify_borrowed_neighbors() {
+    AdjacencyListGraph graph(3);
+    graph.add_edge(0, 2, 2);
+    const auto first = graph.neighbor_view(0);
+    const auto second = graph.neighbor_view(0);
+    CHECK(first.begin() == second.begin());
+    CHECK(first.size() == 1);
+    CHECK(graph.neighbor_view(1).size() == 0);
+    bool rejected = false;
+    try { graph.neighbor_view(3); }
+    catch (const std::out_of_range&) { rejected = true; }
+    CHECK(rejected);
+}
 
 double edge_weight(
     const Graph& graph,
@@ -37,11 +109,11 @@ void verify_representation(GraphRepresentation representation) {
     graph->add_edge(0, 4);
     graph->add_edge(0, 4); // Arestas repetidas nao devem ser contabilizadas.
 
-    assert(graph->vertex_count() == 5);
-    assert(graph->edge_count() == 5);
-    assert(graph->has_edge(0, 1));
-    assert(graph->has_edge(1, 0));
-    assert(!graph->has_edge(0, 2));
+    CHECK(graph->vertex_count() == 5);
+    CHECK(graph->edge_count() == 5);
+    CHECK(graph->has_edge(0, 1));
+    CHECK(graph->has_edge(1, 0));
+    CHECK(!graph->has_edge(0, 2));
 
     auto adjacent = graph->neighbors(4);
     std::sort(
@@ -51,36 +123,36 @@ void verify_representation(GraphRepresentation representation) {
             return left.vertex < right.vertex;
         }
     );
-    assert(adjacent.size() == 4);
+    CHECK(adjacent.size() == 4);
     for (std::size_t index = 0; index < adjacent.size(); ++index) {
-        assert(adjacent[index].vertex == index);
-        assert(adjacent[index].weight == 1.0);
+        CHECK(adjacent[index].vertex == index);
+        CHECK(adjacent[index].weight == 1.0);
     }
 }
 
 void verify_weighted_edges(GraphRepresentation representation) {
     auto graph = make_graph(4, representation);
-    assert(!graph->has_negative_weight());
+    CHECK(!graph->has_negative_weight());
     graph->add_edge(0, 1, 2.5);
     graph->add_edge(1, 2, 0.0);
-    assert(!graph->has_negative_weight());
+    CHECK(!graph->has_negative_weight());
     graph->add_edge(2, 3, -4.25);
-    assert(graph->has_negative_weight());
+    CHECK(graph->has_negative_weight());
     graph->add_edge(0, 1, 2.5);
 
-    assert(graph->edge_count() == 3);
-    assert(edge_weight(*graph, 0, 1) == 2.5);
-    assert(edge_weight(*graph, 1, 0) == 2.5);
-    assert(edge_weight(*graph, 1, 2) == 0.0);
-    assert(edge_weight(*graph, 2, 3) == -4.25);
-    assert(edge_weight(*graph, 3, 2) == -4.25);
+    CHECK(graph->edge_count() == 3);
+    CHECK(edge_weight(*graph, 0, 1) == 2.5);
+    CHECK(edge_weight(*graph, 1, 0) == 2.5);
+    CHECK(edge_weight(*graph, 1, 2) == 0.0);
+    CHECK(edge_weight(*graph, 2, 3) == -4.25);
+    CHECK(edge_weight(*graph, 3, 2) == -4.25);
 
     graph->add_edge(1, 0, 3.0);
-    assert(edge_weight(*graph, 0, 1) == 2.5);
+    CHECK(edge_weight(*graph, 0, 1) == 2.5);
     graph->add_edge(1, 0, 1.25);
-    assert(edge_weight(*graph, 0, 1) == 1.25);
-    assert(edge_weight(*graph, 1, 0) == 1.25);
-    assert(graph->edge_count() == 3);
+    CHECK(edge_weight(*graph, 0, 1) == 1.25);
+    CHECK(edge_weight(*graph, 1, 0) == 1.25);
+    CHECK(graph->edge_count() == 3);
 
     bool infinite_weight_rejected = false;
     try {
@@ -92,7 +164,7 @@ void verify_weighted_edges(GraphRepresentation representation) {
     } catch (const std::invalid_argument&) {
         infinite_weight_rejected = true;
     }
-    assert(infinite_weight_rejected);
+    CHECK(infinite_weight_rejected);
 }
 
 void verify_file_reader(GraphRepresentation representation) {
@@ -103,10 +175,10 @@ void verify_file_reader(GraphRepresentation representation) {
     }
 
     auto graph = read_graph_from_file(path, representation);
-    assert(graph->vertex_count() == 5);
-    assert(graph->edge_count() == 5);
-    assert(graph->has_edge(0, 4));
-    assert(graph->has_edge(4, 3));
+    CHECK(graph->vertex_count() == 5);
+    CHECK(graph->edge_count() == 5);
+    CHECK(graph->has_edge(0, 4));
+    CHECK(graph->has_edge(4, 3));
 
     std::remove(path);
 }
@@ -119,12 +191,12 @@ void verify_weighted_file_reader(GraphRepresentation representation) {
     }
 
     auto graph = read_graph_from_file(path, representation);
-    assert(graph->vertex_count() == 5);
-    assert(graph->edge_count() == 4);
-    assert(edge_weight(*graph, 0, 1) == 0.1);
-    assert(edge_weight(*graph, 1, 4) == 0.0);
-    assert(edge_weight(*graph, 4, 2) == -9.5);
-    assert(edge_weight(*graph, 2, 3) == 2.3);
+    CHECK(graph->vertex_count() == 5);
+    CHECK(graph->edge_count() == 4);
+    CHECK(edge_weight(*graph, 0, 1) == 0.1);
+    CHECK(edge_weight(*graph, 1, 4) == 0.0);
+    CHECK(edge_weight(*graph, 4, 2) == -9.5);
+    CHECK(edge_weight(*graph, 2, 3) == 2.3);
 
     std::remove(path);
 }
@@ -162,7 +234,7 @@ void verify_invalid_weight_is_rejected(GraphRepresentation representation) {
         rejected = true;
     }
     std::remove(path);
-    assert(rejected);
+    CHECK(rejected);
 }
 
 void verify_extra_column_is_rejected(GraphRepresentation representation) {
@@ -179,7 +251,7 @@ void verify_extra_column_is_rejected(GraphRepresentation representation) {
         rejected = true;
     }
     std::remove(path);
-    assert(rejected);
+    CHECK(rejected);
 }
 
 void verify_statistics(GraphRepresentation representation) {
@@ -190,17 +262,17 @@ void verify_statistics(GraphRepresentation representation) {
     graph->add_edge(3, 4);
     graph->add_edge(0, 4);
 
-    assert(degree(*graph, 0) == 2);
-    assert(degree(*graph, 4) == 4);
-    assert((degrees(*graph) == std::vector<std::size_t>{2, 2, 1, 1, 4}));
+    CHECK(degree(*graph, 0) == 2);
+    CHECK(degree(*graph, 4) == 4);
+    CHECK((degrees(*graph) == std::vector<std::size_t>{2, 2, 1, 1, 4}));
 
     const auto statistics = calculate_statistics(*graph);
-    assert(statistics.vertex_count == 5);
-    assert(statistics.edge_count == 5);
-    assert(statistics.minimum_degree == 1);
-    assert(statistics.maximum_degree == 4);
-    assert(statistics.average_degree == 2.0);
-    assert(statistics.median_degree == 2.0);
+    CHECK(statistics.vertex_count == 5);
+    CHECK(statistics.edge_count == 5);
+    CHECK(statistics.minimum_degree == 1);
+    CHECK(statistics.maximum_degree == 4);
+    CHECK(statistics.average_degree == 2.0);
+    CHECK(statistics.median_degree == 2.0);
 }
 
 void verify_even_degree_median(GraphRepresentation representation) {
@@ -209,22 +281,22 @@ void verify_even_degree_median(GraphRepresentation representation) {
     graph->add_edge(1, 2);
 
     const auto statistics = calculate_statistics(*graph);
-    assert(statistics.minimum_degree == 0);
-    assert(statistics.maximum_degree == 2);
-    assert(statistics.average_degree == 1.0);
-    assert(statistics.median_degree == 1.0);
+    CHECK(statistics.minimum_degree == 0);
+    CHECK(statistics.maximum_degree == 2);
+    CHECK(statistics.average_degree == 1.0);
+    CHECK(statistics.median_degree == 1.0);
 }
 
 void verify_empty_graph_statistics(GraphRepresentation representation) {
     auto graph = make_graph(0, representation);
     const auto statistics = calculate_statistics(*graph);
 
-    assert(statistics.vertex_count == 0);
-    assert(statistics.edge_count == 0);
-    assert(statistics.minimum_degree == 0);
-    assert(statistics.maximum_degree == 0);
-    assert(statistics.average_degree == 0.0);
-    assert(statistics.median_degree == 0.0);
+    CHECK(statistics.vertex_count == 0);
+    CHECK(statistics.edge_count == 0);
+    CHECK(statistics.minimum_degree == 0);
+    CHECK(statistics.maximum_degree == 0);
+    CHECK(statistics.average_degree == 0.0);
+    CHECK(statistics.median_degree == 0.0);
 }
 
 void verify_breadth_first_search(GraphRepresentation representation) {
@@ -236,28 +308,28 @@ void verify_breadth_first_search(GraphRepresentation representation) {
 
     const auto search = breadth_first_search(*graph, 0);
 
-    assert(search.source == 0);
-    assert(search.parent[0] == 0);
-    assert(search.parent[1] == 0);
-    assert(search.parent[2] == 0);
-    assert(search.parent[3] == 1);
-    assert(search.parent[4] == 2);
-    assert(search.parent[5] == BreadthFirstSearchResult::not_visited);
+    CHECK(search.source == 0);
+    CHECK(search.parent[0] == 0);
+    CHECK(search.parent[1] == 0);
+    CHECK(search.parent[2] == 0);
+    CHECK(search.parent[3] == 1);
+    CHECK(search.parent[4] == 2);
+    CHECK(search.parent[5] == BreadthFirstSearchResult::not_visited);
 
-    assert(search.level[0] == 0);
-    assert(search.level[1] == 1);
-    assert(search.level[2] == 1);
-    assert(search.level[3] == 2);
-    assert(search.level[4] == 2);
-    assert(search.level[5] == BreadthFirstSearchResult::not_visited);
+    CHECK(search.level[0] == 0);
+    CHECK(search.level[1] == 1);
+    CHECK(search.level[2] == 1);
+    CHECK(search.level[3] == 2);
+    CHECK(search.level[4] == 2);
+    CHECK(search.level[5] == BreadthFirstSearchResult::not_visited);
 
-    assert(search.was_visited(4));
-    assert(!search.was_visited(5));
-    assert((search.visit_order == std::vector<std::size_t>{0, 1, 2, 3, 4}));
+    CHECK(search.was_visited(4));
+    CHECK(!search.was_visited(5));
+    CHECK((search.visit_order == std::vector<std::size_t>{0, 1, 2, 3, 4}));
 
-    assert(distance(*graph, 0, 4) == std::optional<std::size_t>{2});
-    assert(distance(*graph, 3, 4) == std::optional<std::size_t>{4});
-    assert(distance(*graph, 0, 5) == std::nullopt);
+    CHECK(distance(*graph, 0, 4) == std::optional<std::size_t>{2});
+    CHECK(distance(*graph, 3, 4) == std::optional<std::size_t>{4});
+    CHECK(distance(*graph, 0, 5) == std::nullopt);
 }
 
 void verify_dijkstra_algorithms(GraphRepresentation representation) {
@@ -274,28 +346,28 @@ void verify_dijkstra_algorithms(GraphRepresentation representation) {
 
     const auto result = dijkstra_vector(*graph, 0);
     const auto heap_result = dijkstra_heap(*graph, 0);
-    assert(heap_result.source == result.source);
-    assert(heap_result.distance == result.distance);
-    assert(heap_result.parent == result.parent);
+    CHECK(heap_result.source == result.source);
+    CHECK(heap_result.distance == result.distance);
+    CHECK(heap_result.parent == result.parent);
 
-    assert(result.source == 0);
-    assert(result.distance[0] == 0.0);
-    assert(result.distance[1] == 7.0);
-    assert(result.distance[2] == 9.0);
-    assert(result.distance[3] == 20.0);
-    assert(result.distance[4] == 20.0);
-    assert(result.distance[5] == 11.0);
-    assert(std::isinf(result.distance[6]));
+    CHECK(result.source == 0);
+    CHECK(result.distance[0] == 0.0);
+    CHECK(result.distance[1] == 7.0);
+    CHECK(result.distance[2] == 9.0);
+    CHECK(result.distance[3] == 20.0);
+    CHECK(result.distance[4] == 20.0);
+    CHECK(result.distance[5] == 11.0);
+    CHECK(std::isinf(result.distance[6]));
 
-    assert(result.parent[0] == 0);
-    assert((result.path_to(0) == std::vector<std::size_t>{0}));
-    assert((result.path_to(3) == std::vector<std::size_t>{0, 2, 3}));
-    assert((result.path_to(4) == std::vector<std::size_t>{0, 2, 5, 4}));
-    assert(result.path_to(6).empty());
-    assert(result.was_reached(5));
-    assert(!result.was_reached(6));
-    assert(heap_result.path_to(4) == result.path_to(4));
-    assert(heap_result.path_to(6).empty());
+    CHECK(result.parent[0] == 0);
+    CHECK((result.path_to(0) == std::vector<std::size_t>{0}));
+    CHECK((result.path_to(3) == std::vector<std::size_t>{0, 2, 3}));
+    CHECK((result.path_to(4) == std::vector<std::size_t>{0, 2, 5, 4}));
+    CHECK(result.path_to(6).empty());
+    CHECK(result.was_reached(5));
+    CHECK(!result.was_reached(6));
+    CHECK(heap_result.path_to(4) == result.path_to(4));
+    CHECK(heap_result.path_to(6).empty());
 }
 
 void verify_dijkstra_zero_weight(GraphRepresentation representation) {
@@ -306,11 +378,11 @@ void verify_dijkstra_zero_weight(GraphRepresentation representation) {
 
     const auto result = dijkstra_vector(*graph, 0);
     const auto heap_result = dijkstra_heap(*graph, 0);
-    assert(heap_result.distance == result.distance);
-    assert(heap_result.parent == result.parent);
-    assert(result.distance[1] == 0.0);
-    assert(result.distance[2] == 2.0);
-    assert((result.path_to(2) == std::vector<std::size_t>{0, 1, 2}));
+    CHECK(heap_result.distance == result.distance);
+    CHECK(heap_result.parent == result.parent);
+    CHECK(result.distance[1] == 0.0);
+    CHECK(result.distance[2] == 2.0);
+    CHECK((result.path_to(2) == std::vector<std::size_t>{0, 1, 2}));
 }
 
 void verify_dijkstra_real_weights(GraphRepresentation representation) {
@@ -321,10 +393,10 @@ void verify_dijkstra_real_weights(GraphRepresentation representation) {
 
     const auto result = dijkstra_vector(*graph, 0);
     const auto heap_result = dijkstra_heap(*graph, 0);
-    assert(heap_result.distance == result.distance);
-    assert(heap_result.parent == result.parent);
-    assert(std::abs(result.distance[2] - 0.3) < 1e-12);
-    assert((result.path_to(2) == std::vector<std::size_t>{0, 1, 2}));
+    CHECK(heap_result.distance == result.distance);
+    CHECK(heap_result.parent == result.parent);
+    CHECK(std::abs(result.distance[2] - 0.3) < 1e-12);
+    CHECK((result.path_to(2) == std::vector<std::size_t>{0, 1, 2}));
 }
 
 void verify_dijkstra_tie_break(GraphRepresentation representation) {
@@ -336,9 +408,9 @@ void verify_dijkstra_tie_break(GraphRepresentation representation) {
 
     const auto vector_result = dijkstra_vector(*graph, 0);
     const auto heap_result = dijkstra_heap(*graph, 0);
-    assert(vector_result.distance == heap_result.distance);
-    assert(vector_result.parent == heap_result.parent);
-    assert(vector_result.parent[3] == 1);
+    CHECK(vector_result.distance == heap_result.distance);
+    CHECK(vector_result.parent == heap_result.parent);
+    CHECK(vector_result.parent[3] == 1);
 }
 
 void verify_dijkstra_rejects_negative_weight(
@@ -354,7 +426,7 @@ void verify_dijkstra_rejects_negative_weight(
     } catch (const std::domain_error&) {
         rejected = true;
     }
-    assert(rejected);
+    CHECK(rejected);
 
     rejected = false;
     try {
@@ -362,7 +434,7 @@ void verify_dijkstra_rejects_negative_weight(
     } catch (const std::domain_error&) {
         rejected = true;
     }
-    assert(rejected);
+    CHECK(rejected);
 }
 
 void verify_dijkstra_invalid_vertices(GraphRepresentation representation) {
@@ -373,7 +445,7 @@ void verify_dijkstra_invalid_vertices(GraphRepresentation representation) {
     } catch (const std::out_of_range&) {
         empty_graph_rejected = true;
     }
-    assert(empty_graph_rejected);
+    CHECK(empty_graph_rejected);
 
     empty_graph_rejected = false;
     try {
@@ -381,7 +453,7 @@ void verify_dijkstra_invalid_vertices(GraphRepresentation representation) {
     } catch (const std::out_of_range&) {
         empty_graph_rejected = true;
     }
-    assert(empty_graph_rejected);
+    CHECK(empty_graph_rejected);
 
     auto graph = make_graph(2, representation);
     graph->add_edge(0, 1, 1.0);
@@ -392,7 +464,7 @@ void verify_dijkstra_invalid_vertices(GraphRepresentation representation) {
     } catch (const std::out_of_range&) {
         invalid_source_rejected = true;
     }
-    assert(invalid_source_rejected);
+    CHECK(invalid_source_rejected);
 
     invalid_source_rejected = false;
     try {
@@ -400,7 +472,7 @@ void verify_dijkstra_invalid_vertices(GraphRepresentation representation) {
     } catch (const std::out_of_range&) {
         invalid_source_rejected = true;
     }
-    assert(invalid_source_rejected);
+    CHECK(invalid_source_rejected);
 
     const auto result = dijkstra_vector(*graph, 0);
     bool invalid_target_rejected = false;
@@ -409,7 +481,7 @@ void verify_dijkstra_invalid_vertices(GraphRepresentation representation) {
     } catch (const std::out_of_range&) {
         invalid_target_rejected = true;
     }
-    assert(invalid_target_rejected);
+    CHECK(invalid_target_rejected);
 }
 
 void verify_depth_first_search(GraphRepresentation representation) {
@@ -421,24 +493,24 @@ void verify_depth_first_search(GraphRepresentation representation) {
 
     const auto search = depth_first_search(*graph, 0);
 
-    assert(search.source == 0);
-    assert(search.parent[0] == 0);
-    assert(search.parent[1] == 0);
-    assert(search.parent[2] == 0);
-    assert(search.parent[3] == 1);
-    assert(search.parent[4] == 2);
-    assert(search.parent[5] == DepthFirstSearchResult::not_visited);
+    CHECK(search.source == 0);
+    CHECK(search.parent[0] == 0);
+    CHECK(search.parent[1] == 0);
+    CHECK(search.parent[2] == 0);
+    CHECK(search.parent[3] == 1);
+    CHECK(search.parent[4] == 2);
+    CHECK(search.parent[5] == DepthFirstSearchResult::not_visited);
 
-    assert(search.level[0] == 0);
-    assert(search.level[1] == 1);
-    assert(search.level[2] == 1);
-    assert(search.level[3] == 2);
-    assert(search.level[4] == 2);
-    assert(search.level[5] == DepthFirstSearchResult::not_visited);
+    CHECK(search.level[0] == 0);
+    CHECK(search.level[1] == 1);
+    CHECK(search.level[2] == 1);
+    CHECK(search.level[3] == 2);
+    CHECK(search.level[4] == 2);
+    CHECK(search.level[5] == DepthFirstSearchResult::not_visited);
 
-    assert(search.was_visited(4));
-    assert(!search.was_visited(5));
-    assert((search.visit_order == std::vector<std::size_t>{0, 1, 3, 2, 4}));
+    CHECK(search.was_visited(4));
+    CHECK(!search.was_visited(5));
+    CHECK((search.visit_order == std::vector<std::size_t>{0, 1, 3, 2, 4}));
 }
 
 void verify_connected_components(GraphRepresentation representation) {
@@ -455,18 +527,18 @@ void verify_connected_components(GraphRepresentation representation) {
 
     const auto components = connected_components(*graph);
 
-    assert(components.size() == 4);
-    assert(components[0].size() == 4);
-    assert((components[0].vertices == std::vector<std::size_t>{0, 1, 2, 3}));
-    assert(components[1].size() == 2);
-    assert((components[1].vertices == std::vector<std::size_t>{4, 5}));
-    assert((components[2].vertices == std::vector<std::size_t>{6}));
-    assert((components[3].vertices == std::vector<std::size_t>{7}));
+    CHECK(components.size() == 4);
+    CHECK(components[0].size() == 4);
+    CHECK((components[0].vertices == std::vector<std::size_t>{0, 1, 2, 3}));
+    CHECK(components[1].size() == 2);
+    CHECK((components[1].vertices == std::vector<std::size_t>{4, 5}));
+    CHECK((components[2].vertices == std::vector<std::size_t>{6}));
+    CHECK((components[3].vertices == std::vector<std::size_t>{7}));
 }
 
 void verify_empty_graph_components(GraphRepresentation representation) {
     auto graph = make_graph(0, representation);
-    assert(connected_components(*graph).empty());
+    CHECK(connected_components(*graph).empty());
 }
 
 void verify_diameter(GraphRepresentation representation) {
@@ -477,16 +549,16 @@ void verify_diameter(GraphRepresentation representation) {
     path->add_edge(3, 4);
 
     const auto exact_path = exact_diameter(*path);
-    assert(exact_path.is_exact);
-    assert(exact_path.value == 4);
-    assert(exact_path.first_vertex == 0);
-    assert(exact_path.second_vertex == 4);
+    CHECK(exact_path.is_exact);
+    CHECK(exact_path.value == 4);
+    CHECK(exact_path.first_vertex == 0);
+    CHECK(exact_path.second_vertex == 4);
 
     const auto approximate_path = approximate_diameter(*path);
-    assert(!approximate_path.is_exact);
-    assert(approximate_path.value == 4);
-    assert(approximate_path.first_vertex == 4);
-    assert(approximate_path.second_vertex == 0);
+    CHECK(!approximate_path.is_exact);
+    CHECK(approximate_path.value == 4);
+    CHECK(approximate_path.first_vertex == 4);
+    CHECK(approximate_path.second_vertex == 0);
 
     auto disconnected = make_graph(7, representation);
     // Componente triangular com diametro 1.
@@ -498,33 +570,37 @@ void verify_diameter(GraphRepresentation representation) {
     disconnected->add_edge(4, 5);
 
     const auto exact_disconnected = exact_diameter(*disconnected);
-    assert(exact_disconnected.value == 2);
-    assert(exact_disconnected.first_vertex == 3);
-    assert(exact_disconnected.second_vertex == 5);
+    CHECK(exact_disconnected.value == 2);
+    CHECK(exact_disconnected.first_vertex == 3);
+    CHECK(exact_disconnected.second_vertex == 5);
 
     const auto approximate_disconnected = approximate_diameter(*disconnected);
-    assert(approximate_disconnected.value == 2);
+    CHECK(approximate_disconnected.value == 2);
 }
 
 void verify_empty_graph_diameter(GraphRepresentation representation) {
     auto graph = make_graph(0, representation);
 
     const auto exact = exact_diameter(*graph);
-    assert(exact.is_exact);
-    assert(exact.value == 0);
-    assert(exact.first_vertex == DiameterResult::no_vertex);
-    assert(exact.second_vertex == DiameterResult::no_vertex);
+    CHECK(exact.is_exact);
+    CHECK(exact.value == 0);
+    CHECK(exact.first_vertex == DiameterResult::no_vertex);
+    CHECK(exact.second_vertex == DiameterResult::no_vertex);
 
     const auto approximate = approximate_diameter(*graph);
-    assert(!approximate.is_exact);
-    assert(approximate.value == 0);
-    assert(approximate.first_vertex == DiameterResult::no_vertex);
-    assert(approximate.second_vertex == DiameterResult::no_vertex);
+    CHECK(!approximate.is_exact);
+    CHECK(approximate.value == 0);
+    CHECK(approximate.first_vertex == DiameterResult::no_vertex);
+    CHECK(approximate.second_vertex == DiameterResult::no_vertex);
 }
 
 } // namespace
 
-int main() {
+void run_tests() {
+    verify_sampling();
+    verify_bulk_loading(GraphRepresentation::AdjacencyList);
+    verify_bulk_loading(GraphRepresentation::AdjacencyMatrix);
+    verify_borrowed_neighbors();
     verify_representation(GraphRepresentation::AdjacencyList);
     verify_representation(GraphRepresentation::AdjacencyMatrix);
     verify_weighted_edges(GraphRepresentation::AdjacencyList);
@@ -575,5 +651,17 @@ int main() {
     verify_empty_graph_diameter(GraphRepresentation::AdjacencyMatrix);
 
     std::cout << "Todos os testes passaram.\n";
-    return 0;
+}
+
+int main(int argc, char* argv[]) {
+    try {
+        if (argc == 2 && std::string(argv[1]) == "--verify-failure") {
+            CHECK(false);
+        }
+        run_tests();
+        return 0;
+    } catch (const std::exception& error) {
+        std::cerr << "Teste falhou: " << error.what() << '\n';
+        return 1;
+    }
 }

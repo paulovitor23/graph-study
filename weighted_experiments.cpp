@@ -1,5 +1,6 @@
 #include "algorithms.hpp"
 #include "graph.hpp"
+#include "sampling.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -10,10 +11,10 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <numeric>
-#include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 namespace {
@@ -32,6 +33,7 @@ struct Configuration {
     std::size_t source_count = 100;
     std::uint64_t seed = 242;
     BenchmarkMode mode = BenchmarkMode::Both;
+    std::string sources_path = {};
 };
 
 std::size_t parse_positive_size(const char* value, const char* field) {
@@ -66,10 +68,10 @@ BenchmarkMode parse_mode(const std::string& value) {
 }
 
 Configuration parse_arguments(int argc, char* argv[]) {
-    if (argc < 3 || argc > 6) {
+    if (argc < 3 || argc > 7) {
         throw std::invalid_argument(
             "uso: weighted_graph_experiments <grafo.txt> <prefixo_saida> "
-            "[numero_origens] [semente] [both|vector|heap]"
+            "[numero_origens] [semente] [both|vector|heap] [origens.csv]"
         );
     }
 
@@ -77,26 +79,49 @@ Configuration parse_arguments(int argc, char* argv[]) {
     if (argc >= 4) {
         result.source_count = parse_positive_size(argv[3], "numero de origens");
     }
-    if (argc == 5) {
+    if (argc >= 5) {
         result.seed = parse_seed(argv[4]);
     }
-    if (argc == 6) {
-        result.seed = parse_seed(argv[4]);
+    if (argc >= 6) {
         result.mode = parse_mode(argv[5]);
+    }
+    if (argc == 7) {
+        result.sources_path = argv[6];
     }
     return result;
 }
 
-std::vector<std::size_t> select_sources(
-    std::size_t vertex_count,
-    std::size_t requested,
-    std::uint64_t seed
+std::vector<std::size_t> read_sources(
+    const std::string& path, std::size_t vertex_count, std::size_t requested
 ) {
-    std::vector<std::size_t> sources(vertex_count);
-    std::iota(sources.begin(), sources.end(), std::size_t{0});
-    std::mt19937_64 generator(seed);
-    std::shuffle(sources.begin(), sources.end(), generator);
-    sources.resize(std::min(vertex_count, requested));
+    std::ifstream input(path);
+    std::string line;
+    if (!input || !std::getline(input, line)) {
+        throw std::runtime_error("nao foi possivel ler as origens: " + path);
+    }
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+    if (line != "order,source") {
+        throw std::runtime_error("cabecalho de origens deve ser order,source");
+    }
+    std::vector<std::size_t> sources;
+    std::unordered_set<std::size_t> seen;
+    const auto expected = std::min(vertex_count, requested);
+    while (std::getline(input, line)) {
+        std::istringstream row(line);
+        std::size_t order = 0, source = 0;
+        char comma = 0;
+        if (!(row >> order >> comma >> source) || comma != ',' ||
+            order != sources.size() + 1 || source == 0 || source > vertex_count ||
+            !seen.insert(source).second || sources.size() >= expected) {
+            throw std::runtime_error("origem invalida, repetida ou fora de ordem");
+        }
+        row >> std::ws;
+        if (!row.eof()) throw std::runtime_error("colunas extras no arquivo de origens");
+        sources.push_back(source - 1);
+    }
+    if (input.bad() || sources.size() != expected) {
+        throw std::runtime_error("quantidade de origens diferente da solicitada");
+    }
     return sources;
 }
 
@@ -277,11 +302,9 @@ void run(const Configuration& configuration) {
         );
     }
 
-    const auto sources = select_sources(
-        graph->vertex_count(),
-        configuration.source_count,
-        configuration.seed
-    );
+    const auto sources = configuration.sources_path.empty()
+        ? select_sources(graph->vertex_count(), configuration.source_count, configuration.seed)
+        : read_sources(configuration.sources_path, graph->vertex_count(), configuration.source_count);
     const auto timing = benchmark(*graph, sources, configuration.mode);
 
     const std::filesystem::path prefix(configuration.output_prefix);

@@ -34,3 +34,5 @@ endif()
 
 enable_testing()
 add_test(NAME graph_tests COMMAND graph_tests)
+add_test(NAME test_checks_remain_active COMMAND graph_tests --verify-failure)
+set_tests_properties(test_checks_remain_active PROPERTIES WILL_FAIL TRUE)
