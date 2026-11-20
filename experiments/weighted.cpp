@@ -1,17 +1,15 @@
 #include "algorithms.hpp"
 #include "graph.hpp"
 #include "sampling.hpp"
+#include "common.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
@@ -19,7 +17,8 @@
 
 namespace {
 
-using Clock = std::chrono::steady_clock;
+using experiment::Clock;
+using experiment::parse_positive_size;
 
 enum class BenchmarkMode {
     Both,
@@ -35,24 +34,6 @@ struct Configuration {
     BenchmarkMode mode = BenchmarkMode::Both;
     std::string sources_path = {};
 };
-
-std::size_t parse_positive_size(const char* value, const char* field) {
-    std::size_t consumed = 0;
-    const std::size_t result = std::stoull(value, &consumed);
-    if (consumed != std::string(value).size() || result == 0) {
-        throw std::invalid_argument(std::string(field) + " invalido");
-    }
-    return result;
-}
-
-std::uint64_t parse_seed(const char* value) {
-    std::size_t consumed = 0;
-    const std::uint64_t result = std::stoull(value, &consumed);
-    if (consumed != std::string(value).size()) {
-        throw std::invalid_argument("semente invalida");
-    }
-    return result;
-}
 
 BenchmarkMode parse_mode(const std::string& value) {
     if (value == "both") {
@@ -80,7 +61,7 @@ Configuration parse_arguments(int argc, char* argv[]) {
         result.source_count = parse_positive_size(argv[3], "numero de origens");
     }
     if (argc >= 5) {
-        result.seed = parse_seed(argv[4]);
+        result.seed = experiment::parse_unsigned(argv[4], "semente");
     }
     if (argc >= 6) {
         result.mode = parse_mode(argv[5]);
@@ -107,16 +88,16 @@ std::vector<std::size_t> read_sources(
     std::unordered_set<std::size_t> seen;
     const auto expected = std::min(vertex_count, requested);
     while (std::getline(input, line)) {
-        std::istringstream row(line);
-        std::size_t order = 0, source = 0;
-        char comma = 0;
-        if (!(row >> order >> comma >> source) || comma != ',' ||
-            order != sources.size() + 1 || source == 0 || source > vertex_count ||
+        const auto comma = line.find(',');
+        if (comma == std::string::npos) throw std::runtime_error("linha de origem invalida");
+        const auto order = parse_positive_size(std::string_view(line).substr(0, comma), "ordem");
+        auto source_text = std::string_view(line).substr(comma + 1);
+        if (!source_text.empty() && source_text.back() == '\r') source_text.remove_suffix(1);
+        const auto source = parse_positive_size(source_text, "origem");
+        if (order != sources.size() + 1 || source > vertex_count ||
             !seen.insert(source).second || sources.size() >= expected) {
             throw std::runtime_error("origem invalida, repetida ou fora de ordem");
         }
-        row >> std::ws;
-        if (!row.eof()) throw std::runtime_error("colunas extras no arquivo de origens");
         sources.push_back(source - 1);
     }
     if (input.bad() || sources.size() != expected) {
@@ -139,9 +120,7 @@ ShortestPathResult measure(
 ) {
     const auto begin = Clock::now();
     auto result = algorithm(graph, source);
-    total_ms += std::chrono::duration<double, std::milli>(
-        Clock::now() - begin
-    ).count();
+    total_ms += experiment::elapsed_ms(begin);
     return result;
 }
 
@@ -211,10 +190,7 @@ std::string format_path(const std::vector<std::size_t>& path) {
 }
 
 void write_paths(const std::string& path, const Graph& graph) {
-    std::ofstream output(path);
-    if (!output) {
-        throw std::runtime_error("nao foi possivel criar " + path);
-    }
+    auto output = experiment::open_output(path);
 
     output << "source,target,status,distance,path\n";
     constexpr std::size_t external_source = 10;
@@ -223,6 +199,7 @@ void write_paths(const std::string& path, const Graph& graph) {
             output << external_source << ',' << target
                    << ",vertice_inexistente,,\n";
         }
+        experiment::finish_output(output, path);
         return;
     }
 
@@ -242,20 +219,19 @@ void write_paths(const std::string& path, const Graph& graph) {
                << result.distance[target - 1] << ','
                << format_path(result.path_to(target - 1)) << '\n';
     }
+    experiment::finish_output(output, path);
 }
 
 void write_sources(
     const std::string& path,
     const std::vector<std::size_t>& sources
 ) {
-    std::ofstream output(path);
-    if (!output) {
-        throw std::runtime_error("nao foi possivel criar " + path);
-    }
+    auto output = experiment::open_output(path);
     output << "order,source\n";
     for (std::size_t index = 0; index < sources.size(); ++index) {
         output << index + 1 << ',' << sources[index] + 1 << '\n';
     }
+    experiment::finish_output(output, path);
 }
 
 void write_benchmark(
@@ -266,10 +242,7 @@ void write_benchmark(
     const BenchmarkResult& timing,
     BenchmarkMode mode
 ) {
-    std::ofstream output(path);
-    if (!output) {
-        throw std::runtime_error("nao foi possivel criar " + path);
-    }
+    auto output = experiment::open_output(path);
 
     output << "algorithm,vertices,edges,sources,seed,total_ms,average_ms\n"
            << std::fixed << std::setprecision(6);
@@ -286,13 +259,16 @@ void write_benchmark(
                << timing.heap_total_ms << ',' << timing.heap_total_ms / count
                << '\n';
     }
+    experiment::finish_output(output, path);
 }
 
 void run(const Configuration& configuration) {
+    const auto load_begin = Clock::now();
     const auto graph = read_graph_from_file(
         configuration.input_path,
         GraphRepresentation::AdjacencyList
     );
+    const auto load_ms = experiment::elapsed_ms(load_begin);
     if (graph->vertex_count() == 0) {
         throw std::runtime_error("nao e possivel medir um grafo vazio");
     }
@@ -307,10 +283,8 @@ void run(const Configuration& configuration) {
         : read_sources(configuration.sources_path, graph->vertex_count(), configuration.source_count);
     const auto timing = benchmark(*graph, sources, configuration.mode);
 
-    const std::filesystem::path prefix(configuration.output_prefix);
-    if (prefix.has_parent_path()) {
-        std::filesystem::create_directories(prefix.parent_path());
-    }
+    const auto export_begin = Clock::now();
+    experiment::prepare_output(configuration.output_prefix);
 
     const std::string paths_file = configuration.output_prefix + "_paths.csv";
     const std::string sources_file = configuration.output_prefix + "_sources.csv";
@@ -327,6 +301,7 @@ void run(const Configuration& configuration) {
         configuration.mode
     );
 
+    experiment::write_io_timing(configuration.output_prefix, load_ms, export_begin);
     std::cout << "Experimento ponderado concluido.\n"
               << "Caminhos: " << paths_file << '\n'
               << "Origens: " << sources_file << '\n'

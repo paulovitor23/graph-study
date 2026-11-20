@@ -1,5 +1,6 @@
 #include "algorithms.hpp"
 #include "graph.hpp"
+#include "common.hpp"
 
 #include <array>
 #include <cstddef>
@@ -25,12 +26,7 @@ constexpr std::array<const char*, 6> researcher_names = {
 };
 
 std::size_t parse_external_id(const std::string& value) {
-    std::size_t consumed = 0;
-    const std::size_t id = std::stoull(value, &consumed);
-    if (consumed != value.size() || id == 0) {
-        throw std::runtime_error("identificador de pesquisador invalido");
-    }
-    return id;
+    return experiment::parse_positive_size(value, "identificador de pesquisador");
 }
 
 struct Researchers {
@@ -165,6 +161,7 @@ void run(
     const std::string& researchers_path,
     const std::string& output_path
 ) {
+    const auto load_begin = experiment::Clock::now();
     const auto graph = read_graph_from_file(
         graph_path,
         GraphRepresentation::AdjacencyList
@@ -179,15 +176,14 @@ void run(
         researchers_path,
         graph->vertex_count()
     );
+    const auto load_ms = experiment::elapsed_ms(load_begin);
     const auto shortest_paths = dijkstra_heap(
         *graph,
         researchers.required_ids[0]
     );
 
-    std::ofstream output(output_path);
-    if (!output) {
-        throw std::runtime_error("nao foi possivel criar " + output_path);
-    }
+    const auto export_begin = experiment::Clock::now();
+    auto output = experiment::open_output(output_path);
     output << "source,target,source_id,target_id,status,distance,path_ids,"
               "path_names\n";
 
@@ -208,6 +204,8 @@ void run(
                << quote_csv(format_names(path, researchers.names)) << '\n';
     }
 
+    experiment::finish_output(output, output_path);
+    experiment::write_io_timing(output_path, load_ms, export_begin);
     std::cout << "Estudo da rede de pesquisadores concluido: "
               << output_path << '\n';
 }

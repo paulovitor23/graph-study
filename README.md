@@ -38,9 +38,18 @@ com os arquivos da primeira parte. Pesos negativos podem ser armazenados; a
 execução do Dijkstra os rejeita com uma mensagem clara. Quando o arquivo
 repete o mesmo par de vértices, a biblioteca mantém o menor peso.
 
-## Próximas etapas
+## Organização
 
-- executar os experimentos nos grafos da disciplina e preencher o relatório.
+- `graph.hpp/.cpp`, `algorithms.hpp/.cpp`: núcleo da biblioteca;
+- `graph_io.hpp`: parser interno do formato de entrada;
+- `experiments/`: programas do TP1/TP2 e utilitários comuns;
+- `tests/`: regressões funcionais e das interfaces de linha de comando;
+- `benchmarks/`: perfil de desempenho e inventário dos arquivos;
+- `docs/`: decisões e resultados da manutenção;
+- `build/` e `resultados/`: arquivos gerados, fora do versionamento.
+
+Os nomes dos executáveis e seus argumentos continuam os mesmos. Compilações
+manuais devem usar os novos caminhos dos fontes em `experiments/` e `tests/`.
 
 ## Compilação e testes
 
@@ -49,6 +58,17 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 ```
+
+Python 3 é opcional para compilar a biblioteca e executar seus testes C++.
+Quando encontrado pelo CMake, habilita também o teste das três CLIs. Os scripts
+de medição usam Python 3.11 ou posterior. GCC/Clang recebem `-Wall -Wextra
+-Wpedantic`; MSVC recebe `/W4 /permissive- /utf-8`. O parser requer suporte a
+`std::from_chars` para números reais na biblioteca padrão C++17.
+
+Contagens e identificadores negativos, estouros, pesos não finitos e colunas
+extras são rejeitados antes de usar os valores. Números reais usam ponto decimal;
+pesos em notação científica e arquivos CRLF são aceitos. Nas CLIs, contagens,
+identificadores e sementes são formados somente por dígitos; semente zero é válida.
 
 ## Experimentos da Parte 1
 
@@ -87,6 +107,13 @@ Leitura e escrita não fazem parte das medições dos algoritmos. Matrizes que
 excedam 60% da memória física são rejeitadas antes da alocação.
 O campo de memória registra o conjunto residente do processo em MiB (identificado
 como `mb` no arquivo de saída), inclusive no Windows.
+
+Os três programas também escrevem `<prefixo>_io.csv` (no estudo de pesquisadores,
+`<saida.csv>_io.csv`). `load_ms` mede a carga do grafo; no estudo de pesquisadores
+inclui também a leitura dos nomes. `export_ms` mede a geração e escrita das saídas,
+incluindo consultas auxiliares usadas para produzi-las, e exclui a escrita do
+próprio arquivo de tempos. Esses intervalos ficam separados dos benchmarks dos
+algoritmos. Falhas no flush/fechamento dos arquivos fazem o programa retornar erro.
 
 ## Experimentos ponderados da Parte 2
 
@@ -152,6 +179,11 @@ O(∑ d(v) log d(v)), com memória temporária O(Δ), contando as incidências d
 entrada antes de remover duplicatas. A inserção individual por
 `add_edge` continua disponível e procura duplicatas linearmente no grau.
 
+O parser faz a conversão dos campos diretamente, sem criar um stream por linha.
+A compactação das listas foi avaliada e não foi mantida, pois não reduziu a memória
+residente no ensaio controlado. A mediana dos graus usa seleção
+parcial, com custo médio linear, preservando a definição para tamanhos pares.
+
 ## Rede de pesquisadores
 
 O estudo identifica os pesquisadores pela grafia exata do arquivo de nomes e
@@ -163,3 +195,34 @@ gera as distâncias e os caminhos com identificadores e nomes completos:
     data_parte2/rede_colaboracao_vertices.txt \
     resultados/parte2/rede_pesquisadores.csv
 ```
+
+## Medições de manutenção
+
+As ferramentas de perfil são opcionais e não fazem parte da suíte rápida:
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGRAPH_STUDY_BUILD_BENCHMARKS=ON
+cmake --build build --config Release
+python3 benchmarks/run_profile.py build/graph_profile ../TP3/grafo_W_1.txt resultados/perfil_W1.csv --rounds 5 --sources 3 --mode search --timeout 120
+python3 benchmarks/inventory.py build/graph_inventory resultados/inventory.csv ../TP3/grafo_W_1.txt ../TP3/grafo_W_2.txt --timeout 180
+```
+
+O perfil separa carga, estatísticas, BFS, DFS e Dijkstra, registra cada amostra e
+confere uma assinatura dos resultados entre rodadas. `search` evita o Dijkstra
+linear; `all` inclui essa versão e só deve ser usado em grafos pequenos. Em grafos
+com pesos negativos, ambos os Dijkstras são omitidos. `matrix` também se destina
+somente a grafos pequenos. O perfilador não estima a viabilidade dessas escolhas;
+o prazo do script limita cada processo, e entradas grandes devem usar lista.
+
+Use `--baseline <perfilador_preservado>` para alternar a ordem entre versões em
+cada rodada e exigir as mesmas assinaturas de resultados entre ambas.
+
+O perfil registra RSS e pico de RSS do processo em bytes no Linux, com zero quando
+a plataforma não oferece essa coleta. Isso inclui a biblioteca, resultados e
+runtime. A conferência dos resultados e a exportação do perfil ficam fora dos
+tempos medidos. Cada rodada usa um processo novo; o cache de arquivos do sistema
+pode ser compartilhado. Os arquivos JSON adjacentes registram comandos, hashes,
+ambiente e estado. No inventário, duplicatas são contadas por par ordenado, sem
+fundir arcos inversos; as estatísticas de pesos contam as linhas de entrada.
+
+Resultados e limites da etapa 1: [registro da manutenção](docs/ETAPA1.md).

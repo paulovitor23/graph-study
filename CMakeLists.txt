@@ -7,27 +7,31 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(graph_study graph.cpp algorithms.cpp)
 target_include_directories(graph_study PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_compile_options(graph_study PRIVATE -Wall -Wextra -Wpedantic)
-
-add_executable(graph_tests tests.cpp)
+add_executable(graph_tests tests/tests.cpp)
 target_link_libraries(graph_tests PRIVATE graph_study)
-target_compile_options(graph_tests PRIVATE -Wall -Wextra -Wpedantic)
-
-add_executable(graph_experiments experiments.cpp)
+add_executable(graph_experiments experiments/unweighted.cpp)
 target_link_libraries(graph_experiments PRIVATE graph_study)
-target_compile_options(graph_experiments PRIVATE -Wall -Wextra -Wpedantic)
-
-add_executable(weighted_graph_experiments weighted_experiments.cpp)
+add_executable(weighted_graph_experiments experiments/weighted.cpp)
 target_link_libraries(weighted_graph_experiments PRIVATE graph_study)
-target_compile_options(
-    weighted_graph_experiments PRIVATE -Wall -Wextra -Wpedantic
-)
-
-add_executable(researcher_experiments researcher_experiments.cpp)
+add_executable(researcher_experiments experiments/researchers.cpp)
 target_link_libraries(researcher_experiments PRIVATE graph_study)
-target_compile_options(
-    researcher_experiments PRIVATE -Wall -Wextra -Wpedantic
-)
+option(GRAPH_STUDY_BUILD_BENCHMARKS "Build the isolated performance profiler" OFF)
+if(GRAPH_STUDY_BUILD_BENCHMARKS)
+    add_executable(graph_profile benchmarks/profile.cpp)
+    target_link_libraries(graph_profile PRIVATE graph_study)
+    add_executable(graph_inventory benchmarks/inventory.cpp)
+    target_include_directories(graph_inventory PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+endif()
+
+foreach(target graph_study graph_tests graph_experiments weighted_graph_experiments researcher_experiments graph_profile graph_inventory)
+    if(TARGET ${target})
+        if(MSVC)
+            target_compile_options(${target} PRIVATE /W4 /permissive- /utf-8)
+        else()
+            target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
+        endif()
+    endif()
+endforeach()
 if(WIN32)
     target_link_libraries(graph_experiments PRIVATE psapi)
 endif()
@@ -36,3 +40,16 @@ enable_testing()
 add_test(NAME graph_tests COMMAND graph_tests)
 add_test(NAME test_checks_remain_active COMMAND graph_tests --verify-failure)
 set_tests_properties(test_checks_remain_active PROPERTIES WILL_FAIL TRUE)
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME experiment_cli COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/cli.py
+        $<TARGET_FILE:graph_experiments>
+        $<TARGET_FILE:weighted_graph_experiments>
+        $<TARGET_FILE:researcher_experiments>)
+    if(TARGET graph_inventory)
+        add_test(NAME graph_inventory COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/inventory.py $<TARGET_FILE:graph_inventory>)
+    endif()
+endif()

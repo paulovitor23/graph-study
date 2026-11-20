@@ -291,11 +291,14 @@ GraphStatistics calculate_statistics(const Graph& graph) {
     statistics.average_degree = static_cast<double>(degree_sum) /
                                 static_cast<double>(graph_degrees.size());
 
-    std::sort(graph_degrees.begin(), graph_degrees.end());
     const std::size_t middle = graph_degrees.size() / 2;
+    std::nth_element(graph_degrees.begin(), graph_degrees.begin() + middle, graph_degrees.end());
     if (graph_degrees.size() % 2 == 0) {
+        const auto lower = *std::max_element(
+            graph_degrees.begin(), graph_degrees.begin() + middle
+        );
         statistics.median_degree =
-            (static_cast<double>(graph_degrees[middle - 1]) +
+            (static_cast<double>(lower) +
              static_cast<double>(graph_degrees[middle])) /
             2.0;
     } else {

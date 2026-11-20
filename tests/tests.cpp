@@ -1,5 +1,6 @@
 #include "algorithms.hpp"
 #include "graph.hpp"
+#include "experiments/common.hpp"
 
 #include <algorithm>
 #include "sampling.hpp"
@@ -36,6 +37,63 @@ void verify_sampling() {
         std::sort(sample.begin(), sample.end());
         CHECK(std::adjacent_find(sample.begin(), sample.end()) == sample.end());
         CHECK(sample.back() < n);
+    }
+}
+
+void verify_strict_numbers_and_reader(GraphRepresentation representation) {
+    const char* path = "graph_test_numbers.txt";
+    for (const std::string input : {
+        "-1\n", "-0\n", "18446744073709551616\n", "3 extra\n", "\n",
+        "3\n-1 2\n", "3\n0 1\n", "3\n1 4\n", "3\n1\n",
+        "3\n1 2 NaN\n", "3\n1 2 inf\n", "3\n1 2 1e309\n",
+        "3\n1 2 0.1 extra\n", "3\n1 2 +-1\n", "3\n1 2 +\n",
+        "3\n1 2 0x1p0\n", "3\n1 2x\n", "3\n1 2 1.2.3\n"
+    }) {
+        { std::ofstream output(path); output << input; }
+        bool rejected = false;
+        try { read_graph_from_file(path, representation); }
+        catch (const std::runtime_error&) { rejected = true; }
+        std::remove(path);
+        CHECK(rejected);
+    }
+    {
+        std::ofstream output(path);
+        output << " +4 \r\n\t\r\n1\t2\t+.5\r\n2 3 -2.5e-1\n3 4\n1 4 2.\n";
+    }
+    const auto graph = read_graph_from_file(path, representation);
+    std::remove(path);
+    CHECK(graph->vertex_count() == 4);
+    CHECK(graph->edge_count() == 4);
+    CHECK(graph->neighbors(0)[0].weight == 0.5);
+    CHECK(graph->has_negative_weight());
+    for (const auto invalid : {"", "-1", "+1", "1x", " 1", "18446744073709551616"}) {
+        bool rejected = false;
+        try { experiment::parse_unsigned(invalid, "teste"); }
+        catch (const std::invalid_argument&) { rejected = true; }
+        CHECK(rejected);
+    }
+    CHECK(experiment::parse_unsigned("0", "semente") == 0);
+    CHECK(experiment::parse_positive_size("12", "teste") == 12);
+    { std::ofstream output(path); output << "0\n\n"; }
+    const auto empty = read_graph_from_file(path, representation);
+    std::remove(path);
+    CHECK(empty->vertex_count() == 0);
+    CHECK(empty->edge_count() == 0);
+}
+
+void verify_median_against_sort() {
+    // Graus variados, incluindo laços e tamanhos pares/ímpares.
+    for (std::size_t n = 1; n <= 41; ++n) {
+        AdjacencyListGraph graph(n);
+        for (std::size_t u = 0; u < n; ++u) {
+            for (std::size_t v = u; v < n; ++v) {
+                if ((u * 17 + v * 31) % 7 < 2) graph.add_edge(u, v);
+            }
+        }
+        auto sorted = degrees(graph);
+        std::sort(sorted.begin(), sorted.end());
+        const double expected = (static_cast<double>(sorted[(n - 1) / 2]) + sorted[n / 2]) / 2;
+        CHECK(calculate_statistics(graph).median_degree == expected);
     }
 }
 
@@ -91,7 +149,7 @@ double edge_weight(
     std::size_t source,
     std::size_t destination
 ) {
-    for (const Edge& edge : graph.neighbors(source)) {
+    for (const Edge& edge : graph.neighbor_view(source)) {
         if (edge.vertex == destination) {
             return edge.weight;
         }
@@ -598,6 +656,9 @@ void verify_empty_graph_diameter(GraphRepresentation representation) {
 
 void run_tests() {
     verify_sampling();
+    verify_strict_numbers_and_reader(GraphRepresentation::AdjacencyList);
+    verify_strict_numbers_and_reader(GraphRepresentation::AdjacencyMatrix);
+    verify_median_against_sort();
     verify_bulk_loading(GraphRepresentation::AdjacencyList);
     verify_bulk_loading(GraphRepresentation::AdjacencyMatrix);
     verify_borrowed_neighbors();

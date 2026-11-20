@@ -1,12 +1,13 @@
 #include "algorithms.hpp"
 #include "graph.hpp"
+#include "graph_io.hpp"
+#include "common.hpp"
 
 #include <algorithm>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -31,7 +32,7 @@
 
 namespace {
 
-using Clock = std::chrono::steady_clock;
+using experiment::Clock;
 
 struct Configuration {
     std::string input_path;
@@ -62,11 +63,7 @@ Configuration parse_arguments(int argc, char* argv[]) {
 
     Configuration result{argv[1], parse_representation(argv[2]), argv[3]};
     if (argc >= 5) {
-        std::size_t consumed = 0;
-        result.search_count = std::stoull(argv[4], &consumed);
-        if (consumed != std::string(argv[4]).size() || result.search_count == 0) {
-            throw std::invalid_argument("quantidade de buscas invalida");
-        }
+        result.search_count = experiment::parse_positive_size(argv[4], "quantidade de buscas");
     }
     if (argc >= 6) {
         result.diameter_mode = argv[5];
@@ -77,22 +74,18 @@ Configuration parse_arguments(int argc, char* argv[]) {
         throw std::invalid_argument("diametro deve ser exact, approx ou skip");
     }
     if (argc == 7) {
-        std::size_t consumed = 0;
-        result.tree_source = std::stoull(argv[6], &consumed);
-        if (consumed != std::string(argv[6]).size() || result.tree_source == 0) {
-            throw std::invalid_argument("raiz das arvores invalida");
-        }
+        result.tree_source = experiment::parse_positive_size(argv[6], "raiz das arvores");
     }
     return result;
 }
 
 std::size_t declared_vertex_count(const std::string& path) {
     std::ifstream input(path);
-    std::size_t count = 0;
-    if (!input || !(input >> count)) {
+    std::string line;
+    if (!input || !std::getline(input, line)) {
         throw std::runtime_error("cabecalho invalido em " + path);
     }
-    return count;
+    return graph_io::vertex_count(line);
 }
 
 std::size_t physical_memory_bytes() {
@@ -261,10 +254,7 @@ void write_components(
     const std::string& path,
     const std::vector<ConnectedComponent>& components
 ) {
-    std::ofstream output(path);
-    if (!output) {
-        throw std::runtime_error("nao foi possivel criar " + path);
-    }
+    auto output = experiment::open_output(path);
     output << "numero_de_componentes=" << components.size() << '\n';
     for (std::size_t index = 0; index < components.size(); ++index) {
         output << "componente=" << index + 1
@@ -275,6 +265,7 @@ void write_components(
         }
         output << '\n';
     }
+    experiment::finish_output(output, path);
 }
 
 void write_tree_value(
@@ -299,12 +290,10 @@ void write_search_trees(
         throw std::out_of_range("raiz das arvores fora do intervalo do grafo");
     }
 
-    std::ofstream output(path);
-    if (!output) {
-        throw std::runtime_error("nao foi possivel criar " + path);
-    }
+    auto output = experiment::open_output(path);
     if (graph.vertex_count() == 0) {
         output << "grafo vazio: nenhuma arvore de busca\n";
+        experiment::finish_output(output, path);
         return;
     }
 
@@ -332,25 +321,22 @@ void write_search_trees(
         );
         output << '\n';
     }
-    if (!output) {
-        throw std::runtime_error("falha ao escrever " + path);
-    }
+    experiment::finish_output(output, path);
 }
 
 void run(const Configuration& configuration) {
-    const std::filesystem::path prefix(configuration.output_prefix);
-    if (prefix.has_parent_path()) {
-        std::filesystem::create_directories(prefix.parent_path());
-    }
+    experiment::prepare_output(configuration.output_prefix);
 
     verify_matrix_viability(
         declared_vertex_count(configuration.input_path),
         configuration.representation
     );
+    const auto load_begin = Clock::now();
     const auto graph = read_graph_from_file(
         configuration.input_path,
         configuration.representation
     );
+    const auto load_ms = experiment::elapsed_ms(load_begin);
     if (graph->vertex_count() != 0 &&
         configuration.tree_source > graph->vertex_count()) {
         throw std::out_of_range("raiz das arvores fora do intervalo do grafo");
@@ -382,11 +368,9 @@ void run(const Configuration& configuration) {
         ).count();
     }
 
+    const auto export_begin = Clock::now();
     const std::string summary_path = configuration.output_prefix + "_summary.txt";
-    std::ofstream output(summary_path);
-    if (!output) {
-        throw std::runtime_error("nao foi possivel criar " + summary_path);
-    }
+    auto output = experiment::open_output(summary_path);
     output << std::fixed << std::setprecision(3);
     output << "arquivo=" << configuration.input_path << '\n'
            << "representacao="
@@ -430,12 +414,14 @@ void run(const Configuration& configuration) {
                << "tempo_diametro_ms=" << diameter_ms << '\n';
     }
 
+    experiment::finish_output(output, summary_path);
     write_components(configuration.output_prefix + "_components.txt", components);
     write_search_trees(
         configuration.output_prefix + "_search_trees.txt",
         *graph,
         configuration.tree_source
     );
+    experiment::write_io_timing(configuration.output_prefix, load_ms, export_begin);
     std::cout << "Experimento concluido.\nResumo: " << summary_path
               << "\nComponentes: " << configuration.output_prefix
               << "_components.txt\nArvores: " << configuration.output_prefix

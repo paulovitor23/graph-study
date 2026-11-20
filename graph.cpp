@@ -1,11 +1,11 @@
 #include "graph.hpp"
+#include "graph_io.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <fstream>
 #include <limits>
 #include <numeric>
-#include <sstream>
 #include <stdexcept>
 
 namespace {
@@ -246,38 +246,16 @@ std::unique_ptr<Graph> read_graph_from_file(
     if (!std::getline(input, line)) {
         throw std::runtime_error("numero de vertices ausente ou invalido");
     }
-    std::istringstream header(line);
-    std::size_t vertex_count = 0;
-    std::string extra;
-    if (!(header >> vertex_count) || (header >> extra)) {
-        throw std::runtime_error("numero de vertices ausente ou invalido");
-    }
+    const auto vertex_count = graph_io::vertex_count(line);
 
     auto graph = make_graph(vertex_count, representation);
     auto* list = dynamic_cast<AdjacencyListGraph*>(graph.get());
     while (std::getline(input, line)) {
-        if (line.find_first_not_of(" \t\r") == std::string::npos) {
+        if (line.find_first_not_of(" \t\r\v\f") == std::string::npos) {
             continue;
         }
 
-        std::istringstream edge_input(line);
-        std::size_t file_u = 0;
-        std::size_t file_v = 0;
-        double weight = 1.0;
-        if (!(edge_input >> file_u >> file_v)) {
-            throw std::runtime_error("aresta incompleta ou invalida no arquivo");
-        }
-        edge_input >> std::ws;
-        if (!edge_input.eof()) {
-            if (!(edge_input >> weight)) {
-                throw std::runtime_error("peso da aresta invalido no arquivo");
-            }
-            edge_input >> std::ws;
-            if (!edge_input.eof()) {
-                throw std::runtime_error("linha de aresta possui colunas extras");
-            }
-        }
-        validate_weight(weight);
+        const auto [file_u, file_v, weight] = graph_io::edge(line);
 
         // O enunciado numera os vertices a partir de 1; internamente usamos 0.
         if (file_u == 0 || file_v == 0 ||
