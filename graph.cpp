@@ -10,7 +10,10 @@
 
 namespace {
 
-std::size_t matrix_size(std::size_t vertex_count) {
+std::size_t matrix_size(std::size_t vertex_count, GraphDirection direction) {
+    if (direction == GraphDirection::Directed) {
+        throw std::invalid_argument("matriz direcionada nao implementada; utilize lista de adjacencia");
+    }
     if (vertex_count != 0 &&
         vertex_count > std::numeric_limits<std::size_t>::max() / vertex_count) {
         throw std::length_error("grafo grande demais para a matriz de adjacencia");
@@ -26,7 +29,12 @@ void validate_weight(double weight) {
 
 } // namespace
 
-Graph::Graph(std::size_t vertex_count) : vertex_count_(vertex_count) {}
+Graph::Graph(std::size_t vertex_count, GraphDirection direction)
+    : vertex_count_(vertex_count), direction_(direction) {
+    if (direction != GraphDirection::Undirected && direction != GraphDirection::Directed) {
+        throw std::invalid_argument("direcao do grafo invalida");
+    }
+}
 
 std::size_t Graph::vertex_count() const noexcept {
     return vertex_count_;
@@ -38,6 +46,10 @@ std::size_t Graph::edge_count() const noexcept {
 
 bool Graph::has_negative_weight() const noexcept {
     return has_negative_weight_;
+}
+
+bool Graph::is_directed() const noexcept {
+    return direction_ == GraphDirection::Directed;
 }
 
 NeighborRange Graph::neighbor_view(std::size_t vertex) const {
@@ -59,8 +71,8 @@ void Graph::register_edge(double weight) noexcept {
     register_weight(weight);
 }
 
-AdjacencyListGraph::AdjacencyListGraph(std::size_t vertex_count)
-    : Graph(vertex_count), adjacency_(vertex_count) {}
+AdjacencyListGraph::AdjacencyListGraph(std::size_t vertex_count, GraphDirection direction)
+    : Graph(vertex_count, direction), adjacency_(vertex_count) {}
 
 void AdjacencyListGraph::add_edge(
     std::size_t u,
@@ -79,7 +91,7 @@ void AdjacencyListGraph::add_edge(
     if (existing != adjacency_[u].end()) {
         if (weight < existing->weight) {
             existing->weight = weight;
-            if (u != v) {
+            if (u != v && !is_directed()) {
                 const auto reverse = std::find_if(
                     adjacency_[v].begin(),
                     adjacency_[v].end(),
@@ -93,7 +105,7 @@ void AdjacencyListGraph::add_edge(
     }
 
     adjacency_[u].push_back({v, weight});
-    if (u != v) {
+    if (u != v && !is_directed()) {
         adjacency_[v].push_back({u, weight});
     }
     register_edge(weight);
@@ -124,7 +136,7 @@ void AdjacencyListGraph::append_edge_for_loading(
     std::size_t u, std::size_t v, double weight
 ) {
     adjacency_[u].push_back({v, weight});
-    if (u != v) {
+    if (u != v && !is_directed()) {
         adjacency_[v].push_back({u, weight});
     }
 }
@@ -157,17 +169,17 @@ void AdjacencyListGraph::finish_loading() {
             return edge.vertex == removed;
         }), edges.end());
         for (const auto& edge : edges) {
-            if (u <= edge.vertex) {
+            if (is_directed() || u <= edge.vertex) {
                 register_edge(edge.weight);
             }
         }
     }
 }
 
-AdjacencyMatrixGraph::AdjacencyMatrixGraph(std::size_t vertex_count)
-    : Graph(vertex_count),
+AdjacencyMatrixGraph::AdjacencyMatrixGraph(std::size_t vertex_count, GraphDirection direction)
+    : Graph(vertex_count, direction),
       adjacency_(
-          matrix_size(vertex_count),
+          matrix_size(vertex_count, direction),
           std::numeric_limits<double>::quiet_NaN()
       ) {}
 
@@ -225,17 +237,22 @@ std::vector<Edge> AdjacencyMatrixGraph::neighbors(
 
 std::unique_ptr<Graph> make_graph(
     std::size_t vertex_count,
-    GraphRepresentation representation
+    GraphRepresentation representation,
+    GraphDirection direction
 ) {
     if (representation == GraphRepresentation::AdjacencyList) {
-        return std::make_unique<AdjacencyListGraph>(vertex_count);
+        return std::make_unique<AdjacencyListGraph>(vertex_count, direction);
     }
-    return std::make_unique<AdjacencyMatrixGraph>(vertex_count);
+    if (representation == GraphRepresentation::AdjacencyMatrix) {
+        return std::make_unique<AdjacencyMatrixGraph>(vertex_count, direction);
+    }
+    throw std::invalid_argument("representacao do grafo invalida");
 }
 
 std::unique_ptr<Graph> read_graph_from_file(
     const std::string& path,
-    GraphRepresentation representation
+    GraphRepresentation representation,
+    GraphDirection direction
 ) {
     std::ifstream input(path);
     if (!input) {
@@ -248,7 +265,7 @@ std::unique_ptr<Graph> read_graph_from_file(
     }
     const auto vertex_count = graph_io::vertex_count(line);
 
-    auto graph = make_graph(vertex_count, representation);
+    auto graph = make_graph(vertex_count, representation, direction);
     auto* list = dynamic_cast<AdjacencyListGraph*>(graph.get());
     while (std::getline(input, line)) {
         if (line.find_first_not_of(" \t\r\v\f") == std::string::npos) {

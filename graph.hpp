@@ -12,6 +12,11 @@ enum class GraphRepresentation {
     AdjacencyMatrix
 };
 
+enum class GraphDirection {
+    Undirected,
+    Directed
+};
+
 struct Edge {
     std::size_t vertex;
     double weight;
@@ -36,12 +41,13 @@ private:
 
 class Graph {
 public:
-    explicit Graph(std::size_t vertex_count);
+    explicit Graph(std::size_t vertex_count, GraphDirection direction = GraphDirection::Undirected);
     virtual ~Graph() = default;
 
     std::size_t vertex_count() const noexcept;
     std::size_t edge_count() const noexcept;
     bool has_negative_weight() const noexcept;
+    bool is_directed() const noexcept;
 
     virtual void add_edge(
         std::size_t u,
@@ -59,13 +65,16 @@ protected:
 
 private:
     std::size_t vertex_count_;
+    GraphDirection direction_;
     std::size_t edge_count_ = 0;
     bool has_negative_weight_ = false;
 };
 
 class AdjacencyListGraph final : public Graph {
 public:
-    explicit AdjacencyListGraph(std::size_t vertex_count);
+    explicit AdjacencyListGraph(
+        std::size_t vertex_count, GraphDirection direction = GraphDirection::Undirected
+    );
 
     void add_edge(
         std::size_t u,
@@ -78,7 +87,7 @@ public:
 
 private:
     friend std::unique_ptr<Graph> read_graph_from_file(
-        const std::string&, GraphRepresentation
+        const std::string&, GraphRepresentation, GraphDirection
     );
     void append_edge_for_loading(std::size_t u, std::size_t v, double weight);
     void finish_loading();
@@ -87,7 +96,9 @@ private:
 
 class AdjacencyMatrixGraph final : public Graph {
 public:
-    explicit AdjacencyMatrixGraph(std::size_t vertex_count);
+    explicit AdjacencyMatrixGraph(
+        std::size_t vertex_count, GraphDirection direction = GraphDirection::Undirected
+    );
 
     void add_edge(
         std::size_t u,
@@ -104,12 +115,14 @@ private:
 
 std::unique_ptr<Graph> make_graph(
     std::size_t vertex_count,
-    GraphRepresentation representation
+    GraphRepresentation representation,
+    GraphDirection direction = GraphDirection::Undirected
 );
 
 std::unique_ptr<Graph> read_graph_from_file(
     const std::string& path,
-    GraphRepresentation representation
+    GraphRepresentation representation,
+    GraphDirection direction = GraphDirection::Undirected
 );
 
 #endif

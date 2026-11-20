@@ -11,3 +11,7 @@ PLANO_PARTE_2.md
 
 data_parte1/
 data_parte2/
+
+# Cache dos scripts e testes Python.
+__pycache__/
+*.py[cod]

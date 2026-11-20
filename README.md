@@ -1,6 +1,6 @@
 # graph-study
 
-Biblioteca em C++17 para manipulação de grafos não direcionados, desenvolvida
+Biblioteca em C++17 para manipulação de grafos direcionados e não direcionados, desenvolvida
 para o trabalho de Teoria dos Grafos.
 
 ## Funcionalidades implementadas
@@ -17,9 +17,15 @@ para o trabalho de Teoria dos Grafos.
 - componentes conexas, ordenadas por tamanho decrescente;
 - distância entre dois vértices usando BFS;
 - Dijkstra com seleção linear ou heap mínimo indexado;
+- Bellman–Ford de todos os vértices até um destino, com atualização seletiva e parada antecipada;
+- Floyd–Warshall entre todos os pares, com matriz única de distâncias;
+- reconstrução de caminhos e classificação das consultas afetadas por ciclos negativos;
 - distâncias e reconstrução de caminhos mínimos;
 - diâmetro exato;
 - aproximação do diâmetro para grafos grandes.
+
+As buscas e os caminhos mínimos respeitam a direção das arestas. Componentes
+conexas e diâmetro continuam definidos somente para grafos não direcionados.
 
 ## Formato de entrada
 
@@ -38,9 +44,25 @@ com os arquivos da primeira parte. Pesos negativos podem ser armazenados; a
 execução do Dijkstra os rejeita com uma mensagem clara. Quando o arquivo
 repete o mesmo par de vértices, a biblioteca mantém o menor peso.
 
+No modo direcionado, cada linha representa um arco do primeiro para o segundo
+vértice; os pares `(u,v)` e `(v,u)` são independentes. O modo é uma propriedade
+explícita do grafo, com padrão não direcionado:
+
+```cpp
+auto graph = read_graph_from_file(
+    "grafo.txt", GraphRepresentation::AdjacencyList, GraphDirection::Directed
+);
+AdjacencyListGraph directed(4, GraphDirection::Directed);
+```
+
+A matriz de adjacência direcionada é opcional no TP3 e ainda não é suportada:
+essa combinação lança `std::invalid_argument` antes de alocar a matriz. O grau e
+as estatísticas de um grafo direcionado referem-se às arestas de saída. IDs dos
+arquivos começam em 1; IDs nas APIs e nos caminhos retornados começam em 0.
+
 ## Organização
 
-- `graph.hpp/.cpp`, `algorithms.hpp/.cpp`: núcleo da biblioteca;
+- `graph.hpp/.cpp`, `algorithms.hpp/.cpp` e `shortest_paths.cpp`: núcleo da biblioteca;
 - `graph_io.hpp`: parser interno do formato de entrada;
 - `experiments/`: programas do TP1/TP2 e utilitários comuns;
 - `tests/`: regressões funcionais e das interfaces de linha de comando;
@@ -50,6 +72,7 @@ repete o mesmo par de vértices, a biblioteca mantém o menor peso.
 
 Os nomes dos executáveis e seus argumentos continuam os mesmos. Compilações
 manuais devem usar os novos caminhos dos fontes em `experiments/` e `tests/`.
+As compilações manuais dos algoritmos novos devem incluir `shortest_paths.cpp`.
 
 ## Compilação e testes
 
@@ -69,6 +92,76 @@ Contagens e identificadores negativos, estouros, pesos não finitos e colunas
 extras são rejeitados antes de usar os valores. Números reais usam ponto decimal;
 pesos em notação científica e arquivos CRLF são aceitos. Nas CLIs, contagens,
 identificadores e sementes são formados somente por dígitos; semente zero é válida.
+
+## Bellman–Ford e Floyd–Warshall
+
+```cpp
+AdjacencyListGraph graph(4, GraphDirection::Directed);
+graph.add_edge(0, 1, 2);
+graph.add_edge(1, 3, -5);
+graph.add_edge(0, 3, 1);
+
+const auto bf = bellman_ford_to_target(graph, 3);
+// bf.distance[0] == -3; bf.path_from(0) == {0, 1, 3}
+const auto fw = floyd_warshall(graph);
+// fw.distance_between(0, 3) == -3; fw.path(0, 3) == {0, 1, 3}
+const auto tree = fw.predecessors_from(0);
+```
+
+Bellman–Ford retorna `distance[u] = dist(u,target)` e `next[u]`, o próximo
+vértice na árvore orientada ao destino. Usa um vetor de distâncias, listas de
+predecessores construídas em cada chamada e duas fronteiras de vértices alterados.
+O preparo das listas faz parte da chamada e usa memória `O(V+E)`. O histórico
+por número de arestas não é armazenado. A execução encerra ao esvaziar a fronteira.
+
+Floyd–Warshall retorna `distance` e `predecessor` em vetores contíguos, no índice
+`source * vertex_count + target`. Atualiza a mesma matriz a cada intermediário
+`k`; ao melhorar por `k`, usa `pred(i,j) = pred(k,j)`. `predecessors_from(source)`
+copia apenas a linha solicitada da árvore; o resultado não duplica todas as árvores.
+
+Ambos expõem `has_negative_cycle`, que considera qualquer componente do grafo,
+e classificam cada consulta com `status(...)`:
+
+| Estado | Distância | Reconstrução |
+| --- | --- | --- |
+| `PathStatus::Finite` | Valor finito | Caminho válido, incluindo `[v]` na consulta de v para si |
+| `PathStatus::Unreachable` | `+infinity` | Vetor vazio |
+| `PathStatus::NegativeCycle` | `-infinity` | Lança `std::domain_error` |
+
+Um ciclo negativo só afeta `(u,v)` quando pode ser alcançado de `u` e pode
+alcançar `v`. Pode haver ciclo em outra componente e ainda existir uma consulta
+finita. Os sucessores/predecessores dos pares sem caminho finito usam o sentinela
+`no_vertex`. Em Bellman–Ford, a detecção global complementar é executada quando
+necessária, inclusive se o ciclo não alcança o destino; seu custo integra a chamada.
+`relaxation_passes` e `examined_edges` contam somente a busca até o destino,
+excluindo o preparo, a verificação adicional e a detecção global.
+
+As somas usam `double`, sem epsilon no relaxamento. Os algoritmos novos lançam
+`std::overflow_error` se uma soma finita ultrapassar esse intervalo; esse erro não
+é convertido em ausência de caminho ou em ciclo negativo. Empates podem produzir
+caminhos distintos de mesmo custo. A identificação de um ciclo negativo em
+Floyd–Warshall propaga `-infinity` sem continuar somando valores ilimitados.
+
+### Orçamento de memória de Floyd–Warshall
+
+`floyd_warshall_memory_bytes(V)` estima os buffers de distâncias, predecessores e
+índices de ciclos, com verificação de overflow. O orçamento padrão é **256 MiB**:
+
+```cpp
+const auto needed = floyd_warshall_memory_bytes(graph.vertex_count());
+const auto result = floyd_warshall(graph, 64 * 1024 * 1024); // Orçamento de 64 MiB.
+```
+
+Se a estimativa exceder o orçamento, a chamada lança `std::length_error` antes
+de alocar os buffers ou percorrer as arestas. A estimativa exclui o grafo de entrada,
+objetos dos vetores e overhead do alocador. O chamador deve considerar a memória
+realmente disponível e uma margem para o processo. O orçamento não é uma consulta
+automática da RAM; o runner da etapa 3 aplicará também os limites de tempo.
+
+A matriz interna de Floyd–Warshall é necessária mesmo com o grafo em lista.
+Grafos que excedem o orçamento devem ser informados como inviáveis, conforme a
+política definida para os experimentos. Os resultados e testes da implementação
+estão no [registro da etapa 2](docs/ETAPA2.md).
 
 ## Experimentos da Parte 1
 
@@ -226,3 +319,70 @@ ambiente e estado. No inventário, duplicatas são contadas por par ordenado, se
 fundir arcos inversos; as estatísticas de pesos contam as linhas de entrada.
 
 Resultados e limites da etapa 1: [registro da manutenção](docs/ETAPA1.md).
+
+## Estudos automatizados do TP3
+
+O executor `directed_graph_experiments` e o supervisor `scripts/run_tp3.py` trabalham
+com grafos direcionados em lista de adjacência. O manifesto define arquivos, número
+de arcos únicos ordenados, algoritmos, semente dos pilotos e limites. Os caminhos
+dos grafos são relativos ao manifesto; `sha256` é opcional para conferir uma versão
+conhecida do arquivo. A execução sempre calcula e registra o hash efetivo.
+
+```sh
+cmake -S . -B build/etapa3 -DCMAKE_BUILD_TYPE=Release
+cmake --build build/etapa3 -j2
+ctest --test-dir build/etapa3 --output-on-failure
+python3 scripts/run_tp3.py experiments/tp3_manifest.example.json --executable build/etapa3/directed_graph_experiments --output resultados/parte3/nova_execucao
+python3 scripts/summarize_tp3.py resultados/parte3/nova_execucao
+python3 scripts/verify_tp3.py resultados/parte3/nova_execucao
+```
+
+A pasta de saída deve estar vazia: execuções anteriores não são sobrescritas.
+Python 3.11+ é necessário para o supervisor e os resumos. O CTest executa a
+automação com entradas pequenas; os cinco grafos da disciplina são executados
+somente pelo comando explícito acima. O programa requer ao menos 100 vértices
+para as consultas fixas do trabalho.
+
+Modos: `bf_target` consulta 10, 20 e 30 até 100; `floyd` calcula o grafo completo
+e exporta os 25 pares de {10,20,30,40,50}; `bf_all_pairs` repete Bellman–Ford para
+todos os destinos. Uma rodada de todos os pares inclui as V chamadas e o laço,
+sem dividir o total por V. São geradas quatro tabelas:
+
+- `q1_bellman_ford.csv`: distâncias, estados e caminhos até 100;
+- `q2_floyd_warshall.csv`: os 25 pares ordenados, ou motivo de não execução;
+- `q3_tempos.csv`: rodadas completas, médias, dispersão, previsões e recursos;
+- `q4_comparacao.csv`: comparação de todos os pares, quando ambas as médias existem.
+
+O supervisor usa por padrão 70% da memória disponível, estimativas conservadoras
+e limite de duas horas por configuração. `--memory-mib` permite um orçamento
+explícito. No Linux há `RLIMIT_AS` e amostragem de RSS; em outras plataformas a
+proteção implementada é a admissão por estimativa e o prazo do processo. O tempo
+limite inclui carga e pilotos, mas os tempos exportados dos algoritmos excluem
+leitura, escrita, validação, hashing e destruição dos resultados.
+
+Os pilotos ficam separados das dez rodadas. Para todos os pares, são amostrados
+até quatro destinos: 100 e três selecionados pela semente; a projeção usa o menor
+tempo completo, multiplicado por V e pelas rodadas. Pilotos longos com pesos
+negativos podem extrapolar os passos observados após pelo menos 128 passos;
+essa projeção assume persistência das atualizações e é identificada como tal.
+Os observadores `AlgorithmObserver` são habilitados somente nos pilotos; uma
+exceção do observador interrompe o piloto sem retornar um resultado incompleto.
+
+Os estados distinguem `complete`, `skipped`, `aborted` e `error`, com motivos
+separados. O supervisor continua os outros casos após limites. Rodadas completas
+e consultas válidas de pilotos são preservadas; uma média oficial só é preenchida
+com dez rodadas completas. A falta de resultado não vira zero. Se a comparação
+completa não foi obtida, o resumo não declara vencedor empírico.
+
+Cada pasta de configuração registra tempos individuais, pilotos, consultas,
+eventos JSONL, stderr e estado. `environment.json` preserva ambiente e hashes.
+`summarize_tp3.py` gera `RESPOSTAS.md` e `ROTEIRO_8_MIN.md` dos CSVs. A exportação
+opcional `report_tp3_pdf.py` requer ReportLab (fora das dependências da biblioteca)
+e gera o relatório acadêmico; a paginação deve ser conferida ao usar outros dados.
+`verify_tp3.py` recalcula as médias dos tempos individuais e confere as contagens,
+estados, consultas e a existência das duas médias antes de aceitar uma comparação.
+
+Execução concluída e limites encontrados: [registro da etapa 3](docs/ETAPA3.md).
+As [respostas](../TP3/etapa3/resultados/RESPOSTAS.md), o
+[relatório de cinco páginas](../TP3/output/pdf/relatorio_TP3.pdf) e o
+[pacote de entrega](../TP3/entrega_TP3.zip) incluem os resultados desta máquina.

@@ -4,6 +4,7 @@
 #include "graph.hpp"
 
 #include <cstddef>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <vector>
@@ -17,6 +18,7 @@ struct GraphStatistics {
     double median_degree = 0.0;
 };
 
+// Em grafos direcionados, degree e as estatisticas se referem ao grau de saida.
 std::size_t degree(const Graph& graph, std::size_t vertex);
 std::vector<std::size_t> degrees(const Graph& graph);
 GraphStatistics calculate_statistics(const Graph& graph);
@@ -64,6 +66,64 @@ ShortestPathResult dijkstra_vector(
 ShortestPathResult dijkstra_heap(
     const Graph& graph,
     std::size_t source
+);
+
+enum class PathStatus {
+    Finite,
+    Unreachable,
+    NegativeCycle
+};
+
+struct BellmanFordResult {
+    static constexpr std::size_t no_vertex = std::numeric_limits<std::size_t>::max();
+
+    std::size_t target = no_vertex;
+    std::vector<double> distance;
+    std::vector<std::size_t> next;
+    bool has_negative_cycle = false; // Em qualquer componente do grafo.
+    // Contadores da busca ate o destino, sem a deteccao global complementar.
+    std::size_t relaxation_passes = 0;
+    std::size_t examined_edges = 0;
+
+    PathStatus status(std::size_t source) const;
+    // Vazio se inalcançavel; domain_error se afetado por ciclo negativo.
+    std::vector<std::size_t> path_from(std::size_t source) const;
+};
+
+struct AlgorithmProgress {
+    const char* phase;
+    std::size_t completed;
+    std::size_t total;
+    std::size_t examined_edges;
+};
+
+// Usado pelos pilotos; sem observador nas rodadas oficiais cronometradas.
+using AlgorithmObserver = std::function<void(const AlgorithmProgress&)>;
+BellmanFordResult bellman_ford_to_target(
+    const Graph& graph, std::size_t target, const AlgorithmObserver& observer = {}
+);
+
+struct FloydWarshallResult {
+    static constexpr std::size_t no_vertex = std::numeric_limits<std::size_t>::max();
+
+    std::size_t vertex_count = 0;
+    std::vector<double> distance; // Indice source * vertex_count + target.
+    std::vector<std::size_t> predecessor;
+    bool has_negative_cycle = false;
+
+    double distance_between(std::size_t source, std::size_t target) const;
+    PathStatus status(std::size_t source, std::size_t target) const;
+    std::vector<std::size_t> path(std::size_t source, std::size_t target) const;
+    std::vector<std::size_t> predecessors_from(std::size_t source) const;
+};
+
+// Distancias, predecessores e indices de ciclos; nao inclui o grafo de entrada.
+std::size_t floyd_warshall_memory_bytes(std::size_t vertex_count);
+constexpr std::size_t default_floyd_warshall_memory_budget = std::size_t{256} * 1024 * 1024;
+FloydWarshallResult floyd_warshall(
+    const Graph& graph,
+    std::size_t memory_budget_bytes = default_floyd_warshall_memory_budget,
+    const AlgorithmObserver& observer = {}
 );
 
 struct DepthFirstSearchResult {

@@ -1,0 +1,13 @@
+{
+  "rounds": 10,
+  "time_limit_s": 7200,
+  "seed": 242,
+  "algorithms": ["bf_target", "floyd", "bf_all_pairs"],
+  "graphs": [
+    {"id": "W1", "path": "../../TP3/grafo_W_1.txt", "edges": 549953},
+    {"id": "W2", "path": "../../TP3/grafo_W_2.txt", "edges": 824964},
+    {"id": "W3", "path": "../../TP3/grafo_W_3.txt", "edges": 6099941},
+    {"id": "W4", "path": "../../TP3/grafo_W_4.txt", "edges": 30999978},
+    {"id": "W5", "path": "../../TP3/grafo_W_5.txt", "edges": 39999995}
+  ]
+}

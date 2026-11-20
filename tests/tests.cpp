@@ -1,6 +1,7 @@
 #include "algorithms.hpp"
 #include "graph.hpp"
 #include "experiments/common.hpp"
+#include "check.hpp"
 
 #include <algorithm>
 #include "sampling.hpp"
@@ -15,16 +16,6 @@
 #include <vector>
 
 namespace {
-
-void require(bool condition, const char* expression, const char* file, int line) {
-    if (!condition) {
-        throw std::runtime_error(
-            std::string(file) + ':' + std::to_string(line) + ": " + expression
-        );
-    }
-}
-
-#define CHECK(condition) require((condition), #condition, __FILE__, __LINE__)
 
 void verify_sampling() {
     CHECK(select_sources(0, 10, 242).empty());

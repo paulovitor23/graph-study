@@ -490,6 +490,9 @@ std::size_t ConnectedComponent::size() const noexcept {
 }
 
 std::vector<ConnectedComponent> connected_components(const Graph& graph) {
+    if (graph.is_directed()) {
+        throw std::domain_error("componentes conexas requer grafo nao direcionado");
+    }
     std::vector<ConnectedComponent> components;
     std::vector<unsigned char> visited(
         graph.vertex_count(),
@@ -542,6 +545,9 @@ std::vector<ConnectedComponent> connected_components(const Graph& graph) {
 }
 
 DiameterResult exact_diameter(const Graph& graph) {
+    if (graph.is_directed()) {
+        throw std::domain_error("diametro requer grafo nao direcionado");
+    }
     DiameterResult result;
     result.is_exact = true;
 
